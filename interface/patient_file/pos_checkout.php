@@ -54,7 +54,7 @@ $currdecimals = $GLOBALS['currency_decimals'];
 
 $INTEGRATED_AR = $GLOBALS['oer_config']['ws_accounting']['enabled'] === 2;
 
-$details = empty($_GET['details']) ? 0 : 1;
+$details = !isset($_GET['details']) ? 1 : $_GET['details'];
 
 $patient_id = empty($_GET['ptid']) ? $pid : 0 + $_GET['ptid'];
 
@@ -223,7 +223,7 @@ function invoice_post(& $invoice_info)
     $value = $tv->getval();
   }
   else {
-    $value = null;  
+    $value = null;
   }
 
   if ($r->faultCode()) {
@@ -296,18 +296,18 @@ function generate_receipt($patient_id, $encounter=0) {
     $trans_id = $ferow['id'];
     $encounter = $ferow['encounter'];
     $svcdate = substr($ferow['date'], 0, 10);
-    
-    if ($GLOBALS['receipts_by_provider']){
+
+    if ($GLOBALS['receipts_by_provider'] || true){
       if (isset($ferow['provider_id']) ) {
         $encprovider = $ferow['provider_id'];
       } else if (isset($patdata['providerID'])){
         $encprovider = $patdata['providerID'];
       } else { $encprovider = -1; }
     }
-    
+
     if ($encprovider){
       $providerrow = sqlQuery("SELECT fname, mname, lname, title, street, streetb, " .
-        "city, state, zip, phone, fax FROM users WHERE id = ?", array($encprovider) );
+        "city, state, zip, phone, fax, upin FROM users WHERE id = ?", array($encprovider) );
     }
   }
   else {
@@ -378,9 +378,12 @@ function generate_receipt($patient_id, $encounter=0) {
 </head>
 <body class="body_top">
 <center>
-<?php 
+<?php
   if ( $GLOBALS['receipts_by_provider'] && !empty($providerrow) ) { printProviderHeader($providerrow); }
   else { printFacilityHeader($frow); }
+?>
+<?php
+    printProviderDetails($providerrow);
 ?>
 <?php
   echo xlt("Receipt Generated") . ":" . text(date(' F j, Y'));
@@ -611,10 +614,16 @@ function printFacilityHeader($frow){
 
 // Pring receipt header for Provider
 function printProviderHeader($pvdrow){
-	echo "<p><b>" . text($pvdrow['title']) . " " . text($pvdrow['fname']) . " " . text($pvdrow['mname']) . " " . text($pvdrow['lname']) . " " . 
+	echo "<p><b>" . text($pvdrow['title']) . " " . text($pvdrow['fname']) . " " . text($pvdrow['mname']) . " " . text($pvdrow['lname']) . " " .
     "<br>" . text($pvdrow['street']) .
     "<br>" . text($pvdrow['city']) . ', ' . text($pvdrow['state']) . ' ' . text($pvdrow['postal_code']) .
     "<br>" . text($pvdrow['phone']) .
+    "<br>&nbsp" .
+    "<br>";
+}
+
+function printProviderDetails($pvdrow) {
+    echo xlt("Provider") . ": " . text($pvdrow['title']) . " " . text($pvdrow['fname']) . " " . text($pvdrow['mname']) . " " . text($pvdrow['lname']) . " " . text($pvdrow['upin']) .
     "<br>&nbsp" .
     "<br>";
 }
@@ -1138,7 +1147,7 @@ if ($inv_encounter) {
     <?php
     $query1112 = "SELECT * FROM list_options where list_id=?  ORDER BY seq, title ";
     $bres1112 = sqlStatement($query1112,array('payment_method'));
-    while ($brow1112 = sqlFetchArray($bres1112)) 
+    while ($brow1112 = sqlFetchArray($bres1112))
      {
       if($brow1112['option_id']=='electronic' || $brow1112['option_id']=='bank_draft')
      continue;

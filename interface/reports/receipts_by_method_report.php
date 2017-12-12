@@ -25,7 +25,7 @@ require_once "$srcdir/formdata.inc.php";
 require_once("../../custom/code_types.inc.php");
 
 // This controls whether we show pt name, policy number and DOS.
-$showing_ppd = true;
+$showing_ppd = false;
 
 $insarray = array();
 
