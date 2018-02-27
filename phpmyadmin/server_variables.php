@@ -1,121 +1,94 @@
 <?php
 /* vim: set expandtab sw=4 ts=4 sts=4: */
 /**
+ * Server variables
  *
- * @version $Id$
+ * @package PhpMyAdmin
  */
 
-/**
- *
- */
-if (! defined('PMA_NO_VARIABLES_IMPORT')) {
-    define('PMA_NO_VARIABLES_IMPORT', true);
-}
-require_once './libraries/common.inc.php';
+require_once 'libraries/common.inc.php';
+require_once 'libraries/server_variables.lib.php';
+
+$response = PMA_Response::getInstance();
+$header   = $response->getHeader();
+$scripts  = $header->getScripts();
+$scripts->addFile('server_variables.js');
 
 /**
  * Does the common work
  */
-require './libraries/server_common.inc.php';
-
+require 'libraries/server_common.inc.php';
 
 /**
- * Displays the links
+ * Array of documentation links
  */
-require './libraries/server_links.inc.php';
+$variable_doc_links = PMA_getArrayForDocumentLinks();
 
+/**
+ * Ajax request
+ */
+
+if (isset($_REQUEST['ajax_request']) && $_REQUEST['ajax_request'] == true) {
+    if (isset($_REQUEST['type'])) {
+        if ($_REQUEST['type'] === 'getval') {
+            PMA_getAjaxReturnForGetVal($variable_doc_links);
+        } else if ($_REQUEST['type'] === 'setval') {
+            PMA_getAjaxReturnForSetVal($variable_doc_links);
+        }
+        exit;
+    }
+}
 
 /**
  * Displays the sub-page heading
  */
-echo '<h2>' . "\n"
-   . ($cfg['MainPageIconic'] ? '<img class="icon" src="' . $pmaThemeImage . 's_vars.png" width="16" height="16" alt="" />' : '')
-   . '' . $strServerVars . "\n"
-   . '</h2>' . "\n";
-
+$doc_link = PMA_Util::showMySQLDocu('server_system_variables');
+$response->addHtml(PMA_getHtmlForSubPageHeader('variables', $doc_link));
 
 /**
  * Sends the queries and buffers the results
  */
-if (PMA_MYSQL_INT_VERSION >= 40003) {
-    $serverVars = PMA_DBI_fetch_result('SHOW SESSION VARIABLES;', 0, 1);
-    $serverVarsGlobal = PMA_DBI_fetch_result('SHOW GLOBAL VARIABLES;', 0, 1);
+$serverVarsResult = $GLOBALS['dbi']->tryQuery('SHOW SESSION VARIABLES;');
+
+if ($serverVarsResult !== false) {
+
+    $serverVarsSession = array();
+    while ($arr = $GLOBALS['dbi']->fetchRow($serverVarsResult)) {
+        $serverVarsSession[$arr[0]] = $arr[1];
+    }
+    $GLOBALS['dbi']->freeResult($serverVarsResult);
+
+    $serverVars = $GLOBALS['dbi']->fetchResult('SHOW GLOBAL VARIABLES;', 0, 1);
+
+    /**
+     * Link templates
+     */
+    $response->addHtml(PMA_getHtmlForLinkTemplates());
+
+    /**
+     * Displays the page
+     */
+    $response->addHtml(
+        PMA_getHtmlForServerVariables(
+            $variable_doc_links, $serverVars, $serverVarsSession
+        )
+    );
 } else {
-    $serverVars = PMA_DBI_fetch_result('SHOW VARIABLES;', 0, 1);
+    /**
+     * Display the error message
+     */
+    $response->addHTML(
+        PMA_Message::error(
+            sprintf(
+                __('Not enough privilege to view server variables and settings. %s'),
+                PMA_Util::showMySQLDocu(
+                    'server-system-variables',
+                    false,
+                    'sysvar_show_compatibility_56'
+                )
+            )
+        )->getDisplay()
+    );
 }
 
-
-/**
- * Displays the page
- */
-?>
-<table class="data">
-<thead>
-<tr><th><?php echo $strVar; ?></th>
-    <th>
-<?php
-if (PMA_MYSQL_INT_VERSION >= 40003) {
-    echo $strSessionValue . ' / ' . $strGlobalValue;
-} else {
-    echo $strValue;
-}
-?>
-    </th>
-</tr>
-</thead>
-<tbody>
-<?php
-$odd_row = true;
-foreach ($serverVars as $name => $value) {
-    ?>
-<tr class="<?php
-    echo $odd_row ? 'odd' : 'even';
-    if (PMA_MYSQL_INT_VERSION >= 40003
-     && $serverVarsGlobal[$name] !== $value) {
-        echo ' marked';
-    }
-    ?>">
-    <th nowrap="nowrap">
-        <?php echo htmlspecialchars(str_replace('_', ' ', $name)); ?></th>
-    <td class="value"><?php
-    if (strlen($value) < 16 && is_numeric($value)) {
-        echo PMA_formatNumber($value, 0);
-        $is_numeric = true;
-    } else {
-        echo htmlspecialchars($value);
-        $is_numeric = false;
-    }
-    ?></td>
-    <?php
-    if (PMA_MYSQL_INT_VERSION >= 40003
-     && $serverVarsGlobal[$name] !== $value) {
-        ?>
-</tr>
-<tr class="<?php
-    echo $odd_row ? 'odd' : 'even';
-    ?> marked">
-    <td>(<?php echo $strGlobalValue; ?>)</td>
-    <td class="value"><?php
-    if ($is_numeric) {
-        echo PMA_formatNumber($serverVarsGlobal[$name], 0);
-    } else {
-        echo htmlspecialchars($serverVarsGlobal[$name]);
-    }
-    ?></td>
-    <?php } ?>
-</tr>
-    <?php
-    $odd_row = !$odd_row;
-}
-?>
-</tbody>
-</table>
-<?php
-
-
-/**
- * Sends the footer
- */
-require_once './libraries/footer.inc.php';
-
-?>
+exit;

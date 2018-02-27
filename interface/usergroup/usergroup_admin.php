@@ -1,7 +1,27 @@
 <?php
+/**
+ * This script Assign acl 'Emergency login'.
+ *
+ * Copyright (C) 2015 Roberto Vasquez <robertogagliotta@gmail.com>
+ *
+ * LICENSE: This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://opensource.org/licenses/gpl-license.php>;.
+ *
+ * @package OpenEMR
+ * @author  Roberto Vasquez <robertogagliotta@gmail.com>
+ * @link    http://www.open-emr.org
+ */
+
 require_once("../globals.php");
 require_once("../../library/acl.inc");
-require_once("$srcdir/sha1.js");
 require_once("$srcdir/sql.inc");
 require_once("$srcdir/auth.inc");
 require_once("$srcdir/formdata.inc.php");
@@ -11,6 +31,8 @@ require_once ($GLOBALS['srcdir'] . "/classes/postmaster.php");
 $alertmsg = '';
 $bg_msg = '';
 $set_active_msg=0;
+$show_message=0;
+
 
 /* Sending a mail to the admin when the breakglass user is activated only if $GLOBALS['Emergency_Login_email'] is set to 1 */
 $bg_count=count($access_group);
@@ -18,7 +40,7 @@ $mail_id = explode(".",$SMTP_HOST);
 for($i=0;$i<$bg_count;$i++){
 if(($_GET['access_group'][$i] == "Emergency Login") && ($_GET['active'] == 'on') && ($_GET['pre_active'] == 0)){
   if(($_GET['get_admin_id'] == 1) && ($_GET['admin_id'] != "")){
-	$res = sqlStatement("select username from users where id={$_GET["id"]}");
+	$res = sqlStatement("select username from users where id= ? ", array($_GET["id"]));
 	$row = sqlFetchArray($res);
 	$uname=$row['username'];
 	$mail = new MyMailer();
@@ -35,159 +57,161 @@ if(($_GET['access_group'][$i] == "Emergency Login") && ($_GET['active'] == 'on')
 }
 }
 /* To refresh and save variables in mail frame */
-if ($_GET["privatemode"]=="user_admin") {
-    if ($_GET["mode"] == "update") {
-      if ($_GET["username"]) {
-        // $tqvar = addslashes(trim($_GET["username"]));
-        $tqvar = trim(formData('username','G'));
-        $user_data = mysql_fetch_array(sqlStatement("select * from users where id={$_GET["id"]}"));
-        sqlStatement("update users set username='$tqvar' where id={$_GET["id"]}");
-        sqlStatement("update groups set user='$tqvar' where user='". $user_data["username"]  ."'");
+if (isset($_POST["privatemode"]) && $_POST["privatemode"] =="user_admin") {
+    if ($_POST["mode"] == "update") {
+      if (isset($_POST["username"])) {
+        // $tqvar = addslashes(trim($_POST["username"]));
+        $tqvar = trim(formData('username','P'));
+        $user_data = sqlFetchArray(sqlStatement("select * from users where id= ? ", array($_POST["id"])));
+        sqlStatement("update users set username='$tqvar' where id= ? ", array($_POST["id"]));
+        sqlStatement("update groups set user='$tqvar' where user= ?", array($user_data["username"]));
         //echo "query was: " ."update groups set user='$tqvar' where user='". $user_data["username"]  ."'" ;
       }
-      if ($_GET["taxid"]) {
-        $tqvar = formData('taxid','G');
-        sqlStatement("update users set federaltaxid='$tqvar' where id={$_GET["id"]}");
+      if ($_POST["taxid"]) {
+        $tqvar = formData('taxid','P');
+        sqlStatement("update users set federaltaxid='$tqvar' where id= ? ", array($_POST["id"]));
       }
-      if ($_GET["state_license_number"]) {
-        $tqvar = formData('state_license_number','G');
-        sqlStatement("update users set state_license_number='$tqvar' where id={$_GET["id"]}");
+      if ($_POST["state_license_number"]) {
+        $tqvar = formData('state_license_number','P');
+        sqlStatement("update users set state_license_number='$tqvar' where id= ? ", array($_POST["id"]));
       }
-      if ($_GET["drugid"]) {
-        $tqvar = formData('drugid','G');
-        sqlStatement("update users set federaldrugid='$tqvar' where id={$_GET["id"]}");
+      if ($_POST["drugid"]) {
+        $tqvar = formData('drugid','P');
+        sqlStatement("update users set federaldrugid='$tqvar' where id= ? ", array($_POST["id"]));
       }
-      if ($_GET["upin"]) {
-        $tqvar = formData('upin','G');
-        sqlStatement("update users set upin='$tqvar' where id={$_GET["id"]}");
+      if ($_POST["upin"]) {
+        $tqvar = formData('upin','P');
+        sqlStatement("update users set upin='$tqvar' where id= ? ", array($_POST["id"]));
       }
-      if ($_GET["npi"]) {
-        $tqvar = formData('npi','G');
-        sqlStatement("update users set npi='$tqvar' where id={$_GET["id"]}");
+      if ($_POST["npi"]) {
+        $tqvar = formData('npi','P');
+        sqlStatement("update users set npi='$tqvar' where id= ? ", array($_POST["id"]));
       }
-      if ($_GET["taxonomy"]) {
-        $tqvar = formData('taxonomy','G');
-        sqlStatement("update users set taxonomy = '$tqvar' where id= {$_GET["id"]}");
+      if ($_POST["taxonomy"]) {
+        $tqvar = formData('taxonomy','P');
+        sqlStatement("update users set taxonomy = '$tqvar' where id= ? ", array($_POST["id"]));
       }
-      if ($_GET["lname"]) {
-        $tqvar = formData('lname','G');
-        sqlStatement("update users set lname='$tqvar' where id={$_GET["id"]}");
+      if ($_POST["lname"]) {
+        $tqvar = formData('lname','P');
+        sqlStatement("update users set lname='$tqvar' where id= ? ", array($_POST["id"]));
       }
-      if ($_GET["job"]) {
-        $tqvar = formData('job','G');
-        sqlStatement("update users set specialty='$tqvar' where id={$_GET["id"]}");
+      if ($_POST["job"]) {
+        $tqvar = formData('job','P');
+        sqlStatement("update users set specialty='$tqvar' where id= ? ", array($_POST["id"]));
       }
-      if ($_GET["mname"]) {
-              $tqvar = formData('mname','G');
-              sqlStatement("update users set mname='$tqvar' where id={$_GET["id"]}");
+      if ($_POST["mname"]) {
+              $tqvar = formData('mname','P');
+              sqlStatement("update users set mname='$tqvar' where id= ? ", array($_POST["id"]));
       }
-      if ($_GET["facility_id"]) {
-              $tqvar = formData('facility_id','G');
-              sqlStatement("update users set facility_id = '$tqvar' where id = {$_GET["id"]}");
+      if ($_POST["facility_id"]) {
+              $tqvar = formData('facility_id','P');
+              sqlStatement("update users set facility_id = '$tqvar' where id = ? ", array($_POST["id"]));
               //(CHEMED) Update facility name when changing the id
-              sqlStatement("UPDATE users, facility SET users.facility = facility.name WHERE facility.id = '$tqvar' AND users.id = {$_GET["id"]}");
+              sqlStatement("UPDATE users, facility SET users.facility = facility.name WHERE facility.id = '$tqvar' AND users.id = {$_POST["id"]}");
               //END (CHEMED)
       }
-      if ($GLOBALS['restrict_user_facility'] && $_GET["schedule_facility"]) {
+      if ($GLOBALS['restrict_user_facility'] && $_POST["schedule_facility"]) {
           sqlStatement("delete from users_facility
             where tablename='users'
-            and table_id={$_GET["id"]}
-            and facility_id not in (" . implode(",", $_GET['schedule_facility']) . ")");
-          foreach($_GET["schedule_facility"] as $tqvar) {
+            and table_id= ?
+            and facility_id not in (" . implode(",", $_POST['schedule_facility']) . ")", array($_POST["id"]));
+          foreach($_POST["schedule_facility"] as $tqvar) {
           sqlStatement("replace into users_facility set
                 facility_id = '$tqvar',
                 tablename='users',
-                table_id = {$_GET["id"]}");
+                table_id = {$_POST["id"]}");
         }
       }
-      if ($_GET["fname"]) {
-              $tqvar = formData('fname','G');
-              sqlStatement("update users set fname='$tqvar' where id={$_GET["id"]}");
+      if ($_POST["fname"]) {
+              $tqvar = formData('fname','P');
+              sqlStatement("update users set fname='$tqvar' where id= ? ", array($_POST["id"]));
       }
 
       //(CHEMED) Calendar UI preference
-      if ($_GET["cal_ui"]) {
-              $tqvar = formData('cal_ui','G');
-              sqlStatement("update users set cal_ui = '$tqvar' where id = {$_GET["id"]}");
+      if ($_POST["cal_ui"]) {
+              $tqvar = formData('cal_ui','P');
+              sqlStatement("update users set cal_ui = '$tqvar' where id = ? ", array($_POST["id"]));
 
               // added by bgm to set this session variable if the current user has edited
           //   their own settings
-          if ($_SESSION['authId'] == $_GET["id"]) {
+          if ($_SESSION['authId'] == $_POST["id"]) {
             $_SESSION['cal_ui'] = $tqvar;
           }
       }
       //END (CHEMED) Calendar UI preference
 
-      if (isset($_GET['default_warehouse'])) {
+      if (isset($_POST['default_warehouse'])) {
         sqlStatement("UPDATE users SET default_warehouse = '" .
-          formData('default_warehouse','G') .
-          "' WHERE id = '" . formData('id','G') . "'");
+          formData('default_warehouse','P') .
+          "' WHERE id = '" . formData('id','P') . "'");
       }
 
-      if (isset($_GET['irnpool'])) {
+      if (isset($_POST['irnpool'])) {
         sqlStatement("UPDATE users SET irnpool = '" .
-          formData('irnpool','G') .
-          "' WHERE id = '" . formData('id','G') . "'");
+          formData('irnpool','P') .
+          "' WHERE id = '" . formData('id','P') . "'");
       }
-     //VicarePlus: Empty string of SHA1 is validated
-     if ($_GET["newauthPass"] && $_GET["newauthPass"] != "da39a3ee5e6b4b0d3255bfef95601890afd80709") { // account for empty
-	$tqvar = formData('newauthPass','G');
-// When the user password is updated and the password history option is enabled, update the password history in database. A new password expiration is also calculated
-	if($GLOBALS['password_history'] != 0 ){
-		$updatepwd = UpdatePasswordHistory($_GET["id"], $tqvar);
-	}else
-	{
-		sqlStatement("update users set password='$tqvar' where id={$_GET["id"]}");
-		if($GLOBALS['password_expiration_days'] != 0){
-			$exp_days=$GLOBALS['password_expiration_days'];
-			$exp_date = date('Y-m-d', strtotime("+$exp_days days"));
-			sqlStatement("update users set pwd_expiration_date='$exp_date' where id=$userid");
-		}
-	}
-}
+
+     if ($_POST["adminPass"] && $_POST["clearPass"]) { 
+        require_once("$srcdir/authentication/password_change.php");
+        $clearAdminPass=$_POST['adminPass'];
+        $clearUserPass=$_POST['clearPass'];
+        $password_err_msg="";
+        $success=update_password($_SESSION['authId'],$_POST['id'],$clearAdminPass,$clearUserPass,$password_err_msg);
+        if(!$success)
+        {
+            error_log($password_err_msg);    
+            $alertmsg.=$password_err_msg;
+        }
+     }
 
       // for relay health single sign-on
-      if ($_GET["ssi_relayhealth"]) {
-        $tqvar = formData('ssi_relayhealth','G');
-        sqlStatement("update users set ssi_relayhealth = '$tqvar' where id = {$_GET["id"]}");
+      if (isset($_POST["ssi_relayhealth"]) && $_POST["ssi_relayhealth"]) {
+        $tqvar = formData('ssi_relayhealth','P');
+        sqlStatement("update users set ssi_relayhealth = '$tqvar' where id = ? ", array($_POST["id"]));
       }
 
-      $tqvar  = $_GET["authorized"] ? 1 : 0;
-      $actvar = $_GET["active"]     ? 1 : 0;
-      $calvar = $_GET["calendar"]   ? 1 : 0;
+      $tqvar  = $_POST["authorized"] ? 1 : 0;
+      $actvar = $_POST["active"]     ? 1 : 0;
+      $calvar = $_POST["calendar"]   ? 1 : 0;
   
       sqlStatement("UPDATE users SET authorized = $tqvar, active = $actvar, " .
-        "calendar = $calvar, see_auth = '" . $_GET['see_auth'] . "' WHERE " .
-        "id = {$_GET["id"]}");
+        "calendar = $calvar, see_auth = ? WHERE " .
+        "id = ? ", array($_POST['see_auth'], $_POST["id"]));
       //Display message when Emergency Login user was activated 
-      $bg_count=count($_GET['access_group']);
+      $bg_count=count($_POST['access_group']);
       for($i=0;$i<$bg_count;$i++){
-        if(($_GET['access_group'][$i] == "Emergency Login") && ($_GET['pre_active'] == 0) && ($actvar == 1)){
+        if(($_POST['access_group'][$i] == "Emergency Login") && ($_POST['pre_active'] == 0) && ($actvar == 1)){
          $show_message = 1;
         }
       }
-      if(($_GET['access_group'])){
+      if(($_POST['access_group'])){
 	for($i=0;$i<$bg_count;$i++){
-        if(($_GET['access_group'][$i] == "Emergency Login") && ($_GET['user_type']) == "" && ($_GET['check_acl'] == 1) && ($_GET['active']) != ""){
+        if(($_POST['access_group'][$i] == "Emergency Login") && ($_POST['user_type']) == "" && ($_POST['check_acl'] == 1) && ($_POST['active']) != ""){
          $set_active_msg=1;
         }
       }
     }	
-      if ($_GET["comments"]) {
-        $tqvar = formData('comments','G');
-        sqlStatement("update users set info = '$tqvar' where id = {$_GET["id"]}");
+      if ($_POST["comments"]) {
+        $tqvar = formData('comments','P');
+        sqlStatement("update users set info = '$tqvar' where id = ? ", array($_POST["id"]));
       }
-	$erxrole = formData('erxrole','G');
-	sqlStatement("update users set newcrop_user_role = '$erxrole' where id = {$_GET["id"]}");
+	$erxrole = formData('erxrole','P');
+	sqlStatement("update users set newcrop_user_role = '$erxrole' where id = ? ", array($_POST["id"]));
 
+	  if ($_POST["physician_type"]) {
+		$physician_type = formData('physician_type');
+		sqlStatement("update users set physician_type = '$physician_type' where id = ? ", array($_POST["id"]));
+	  }
+	  
       if (isset($phpgacl_location) && acl_check('admin', 'acl')) {
         // Set the access control group of user
-        $user_data = mysql_fetch_array(sqlStatement("select username from users where id={$_GET["id"]}"));
-        set_user_aro($_GET['access_group'], $user_data["username"],
-          formData('fname','G'), formData('mname','G'), formData('lname','G'));
+        $user_data = sqlFetchArray(sqlStatement("select username from users where id= ?", array($_POST["id"])));
+        set_user_aro($_POST['access_group'], $user_data["username"],
+          formData('fname','P'), formData('mname','P'), formData('lname','P'));
       }
 
-      $ws = new WSProvider($_GET['id']);
+      $ws = new WSProvider($_POST['id']);
 
     }
 }
@@ -204,42 +228,58 @@ if (isset($_POST["mode"])) {
 
     $res = sqlStatement("select distinct username from users where username != ''");
     $doit = true;
-    while ($row = mysql_fetch_array($res)) {
+    while ($row = sqlFetchArray($res)) {
       if ($doit == true && $row['username'] == trim(formData('rumple'))) {
         $doit = false;
       }
     }
 
     if ($doit == true) {
-      //if password expiration option is enabled,  calculate the expiration date of the password
-      if($GLOBALS['password_expiration_days'] != 0){
-      $exp_days = $GLOBALS['password_expiration_days'];
-      $exp_date = date('Y-m-d', strtotime("+$exp_days days"));
-      }
-      $prov_id = idSqlStatement("insert into users set " .
-        "username = '"         . trim(formData('rumple'       )) .
-        "', password = '"      . trim(formData('newauthPass'  )) .
-        "', fname = '"         . trim(formData('fname'        )) .
-        "', mname = '"         . trim(formData('mname'        )) .
-        "', lname = '"         . trim(formData('lname'        )) .
-        "', federaltaxid = '"  . trim(formData('federaltaxid' )) .
-	"', state_license_number = '"  . trim(formData('state_license_number' )) .
-	"', newcrop_user_role = '"  . trim(formData('erxrole' )) .
-        "', authorized = '"    . trim(formData('authorized'   )) .
-        "', info = '"          . trim(formData('info'         )) .
-        "', federaldrugid = '" . trim(formData('federaldrugid')) .
-        "', upin = '"          . trim(formData('upin'         )) .
-        "', npi  = '"          . trim(formData('npi'          )).
-        "', taxonomy = '"      . trim(formData('taxonomy'     )) .
-        "', facility_id = '"   . trim(formData('facility_id'  )) .
-        "', specialty = '"     . trim(formData('specialty'    )) .
-        "', see_auth = '"      . trim(formData('see_auth'     )) .
-        "', cal_ui = '"        . trim(formData('cal_ui'       )) .
-        "', default_warehouse = '" . trim(formData('default_warehouse')) .
-        "', irnpool = '"       . trim(formData('irnpool'      )) .
-        "', calendar = '"      . $calvar                         .
-        "', pwd_expiration_date = '" . trim("$exp_date") .
-        "'");
+    require_once("$srcdir/authentication/password_change.php");
+
+    //if password expiration option is enabled,  calculate the expiration date of the password
+    if($GLOBALS['password_expiration_days'] != 0){
+    $exp_days = $GLOBALS['password_expiration_days'];
+    $exp_date = date('Y-m-d', strtotime("+$exp_days days"));
+    }
+    
+    $insertUserSQL=            
+            "insert into users set " .
+            "username = '"         . trim(formData('rumple'       )) .
+            "', password = '"      . 'NoLongerUsed'                  .
+            "', fname = '"         . trim(formData('fname'        )) .
+            "', mname = '"         . trim(formData('mname'        )) .
+            "', lname = '"         . trim(formData('lname'        )) .
+            "', federaltaxid = '"  . trim(formData('federaltaxid' )) .
+            "', state_license_number = '"  . trim(formData('state_license_number' )) .
+            "', newcrop_user_role = '"  . trim(formData('erxrole' )) .
+			"', physician_type = '"  . trim(formData('physician_type' )) .
+            "', authorized = '"    . trim(formData('authorized'   )) .
+            "', info = '"          . trim(formData('info'         )) .
+            "', federaldrugid = '" . trim(formData('federaldrugid')) .
+            "', upin = '"          . trim(formData('upin'         )) .
+            "', npi  = '"          . trim(formData('npi'          )).
+            "', taxonomy = '"      . trim(formData('taxonomy'     )) .
+            "', facility_id = '"   . trim(formData('facility_id'  )) .
+            "', specialty = '"     . trim(formData('specialty'    )) .
+            "', see_auth = '"      . trim(formData('see_auth'     )) .
+            "', cal_ui = '"        . trim(formData('cal_ui'       )) .
+            "', default_warehouse = '" . trim(formData('default_warehouse')) .
+            "', irnpool = '"       . trim(formData('irnpool'      )) .
+            "', calendar = '"      . $calvar                         .
+            "', pwd_expiration_date = '" . trim("$exp_date") .
+            "'";
+    
+    $clearAdminPass=$_POST['adminPass'];
+    $clearUserPass=$_POST['stiltskin'];
+    $password_err_msg="";
+    $prov_id="";
+    $success = update_password($_SESSION['authId'], 0, $clearAdminPass, $clearUserPass,
+      $password_err_msg, true, $insertUserSQL, trim(formData('rumple')), $prov_id);
+    error_log($password_err_msg);
+    $alertmsg .=$password_err_msg;
+    if($success)
+    {
       //set the facility name from the selected facility_id
       sqlStatement("UPDATE users, facility SET users.facility = facility.name WHERE facility.id = '" . trim(formData('facility_id')) . "' AND users.username = '" . trim(formData('rumple')) . "'");
 
@@ -253,6 +293,10 @@ if (isset($_POST["mode"])) {
       }
 
       $ws = new WSProvider($prov_id);
+        
+    }
+
+        
 
     } else {
       $alertmsg .= xl('User','','',' ') . trim(formData('rumple')) . xl('already exists.','',' ');
@@ -308,19 +352,18 @@ if (isset($_GET["mode"])) {
   *******************************************************************/
 
   if ($_GET["mode"] == "delete_group") {
-    $res = sqlStatement("select distinct user from groups where id = '" .
-      $_GET["id"] . "'");
+    $res = sqlStatement("select distinct user from groups where id = ?", array($_GET["id"]));
     for ($iter = 0; $row = sqlFetchArray($res); $iter++)
       $result[$iter] = $row;
     foreach($result as $iter)
       $un = $iter{"user"};
     $res = sqlStatement("select name, user from groups where user = '$un' " .
-      "and id != '" . $_GET["id"] . "'");
+      "and id != ?", array($_GET["id"]));
 
     // Remove the user only if they are also in some other group.  I.e. every
     // user must be a member of at least one group.
     if (sqlFetchArray($res) != FALSE) {
-      sqlStatement("delete from groups where id = '" . $_GET["id"] . "'");
+      sqlStatement("delete from groups where id = ?", array($_GET["id"]));
     } else {
       $alertmsg .= "You must add this user to some other group before " .
         "removing them from this group. ";
@@ -432,8 +475,8 @@ foreach ($result4 as $iter) {
   print "<tr height=20  class='text' style='border-bottom: 1px dashed;'>
 		<td class='text'><b><a href='user_admin.php?id=" . $iter{"id"} .
     "' class='iframe_medium' onclick='top.restoreSession()'><span>" . $iter{"username"} . "</span></a></b>" ."&nbsp;</td>
-	<td><span class='text'>" .$iter{"fname"} . ' ' . $iter{"lname"}."</span>&nbsp;</td>
-	<td><span class='text'>" .$iter{"info"} . "</span>&nbsp;</td>
+	<td><span class='text'>" . attr($iter{"fname"}) . ' ' . attr($iter{"lname"}) ."</span>&nbsp;</td>
+	<td><span class='text'>" . attr($iter{"info"}) . "</span>&nbsp;</td>
 	<td align='left'><span class='text'>" .$iter{"authorized"} . "</span>&nbsp;</td>";
   print "<td><!--<a href='usergroup_admin.php?mode=delete&id=" . $iter{"id"} .
     "' class='link_submit'>[Delete]</a>--></td>";

@@ -1,6 +1,6 @@
 <?php
     require_once("{$GLOBALS['srcdir']}/sql.inc");
-    require_once("{$GLOBALS['srcdir']}/formdata.inc.php");
+    require_once(dirname(__FILE__) . "/../interface/reports/report.inc.php");
     function GenerateTheQueryPart()
      {
         global $query_part,$query_part2,$billstring,$auth;
@@ -13,7 +13,7 @@
          {
             foreach($_REQUEST['final_this_page_criteria'] as $criteria_key => $criteria_value)
              {
-              $criteria_value=PrepareSearchItem($criteria_value);
+              $criteria_value=PrepareSearchItem($criteria_value); // this escapes for sql
               $SplitArray=array();
               //---------------------------------------------------------
               if(strpos($criteria_value,"billing.billed = '1'")!== false)
@@ -23,7 +23,7 @@
               elseif(strpos($criteria_value,"billing.billed = '0'")!== false)
                {
                 //3 is an error condition
-                $billstring .= ' AND '."(billing.billed = '0' or (billing.billed = '1' and billing.bill_process = '3'))";
+                $billstring .= ' AND '."(billing.billed is null or billing.billed = '0' or (billing.billed = '1' and billing.bill_process = '3'))";
                }
               elseif(strpos($criteria_value,"billing.billed = '7'")!== false)
                {
@@ -42,8 +42,8 @@
               //---------------------------------------------------------
               elseif(strpos($criteria_value,"patient_data.fname")!== false)
                {
-                $SplitArray=split(' like ',$criteria_value);
-                $query_part .= " AND ($criteria_value or patient_data.lname like ".add_escape_custom($SplitArray[1]).")";
+                $SplitArray=explode(' like ',$criteria_value);
+                $query_part .= " AND ($criteria_value or patient_data.lname like ".$SplitArray[1].")";
                }
               //---------------------------------------------------------
               elseif(strpos($criteria_value,"billing.authorized")!== false)
@@ -53,7 +53,7 @@
               //---------------------------------------------------------
               elseif(strpos($criteria_value,"form_encounter.pid")!== false)
                {//comes like '781,780'
-                $SplitArray=split(" = '",$criteria_value);//comes like 781,780'
+                $SplitArray=explode(" = '",$criteria_value);//comes like 781,780'
                 $SplitArray[1]=substr($SplitArray[1], 0, -1);//comes like 781,780
                 $query_part .= ' AND form_encounter.pid in ('.$SplitArray[1].')';
                 $query_part2 .= ' AND pid in ('.$SplitArray[1].')';
@@ -61,7 +61,7 @@
               //---------------------------------------------------------
               elseif(strpos($criteria_value,"form_encounter.encounter")!== false)
                {//comes like '781,780'
-                $SplitArray=split(" = '",$criteria_value);//comes like 781,780'
+                $SplitArray=explode(" = '",$criteria_value);//comes like 781,780'
                 $SplitArray[1]=substr($SplitArray[1], 0, -1);//comes like 781,780
                 $query_part .= ' AND form_encounter.encounter in ('.$SplitArray[1].')';
                }
@@ -107,7 +107,7 @@
             "ORDER BY form_encounter.encounter, form_encounter.pid, billing.code_type, billing.code ASC";
             //echo $sql;
         $res = sqlStatement($sql,array($code_type));
-
+        $all = False;
         for($iter=0; $row=sqlFetchArray($res); $iter++)
         {
             $all[$iter] = $row;
@@ -139,7 +139,7 @@
             "ORDER BY form_encounter.encounter, form_encounter.pid, billing.code_type, billing.code ASC";
             //echo $sql;
         $res = sqlStatement($sql,array($code_type));
-
+        $all = False;
         for($iter=0; $row=sqlFetchArray($res); $iter++)
         {
             $all[$iter] = $row;

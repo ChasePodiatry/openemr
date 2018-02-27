@@ -1,5 +1,5 @@
 <?php
-// Copyright (C) 2010 Rod Roark <rod@sunsetsystems.com>
+// Copyright (C) 2010,2014 Rod Roark <rod@sunsetsystems.com>
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -13,23 +13,25 @@
 $sanitize_all_escapes = true;
 $fake_register_globals = false;
 
-require_once("../globals.php");
-require_once("$srcdir/acl.inc");
+require_once('../globals.php');
+require_once($GLOBALS['srcdir'].'/acl.inc');
+require_once($GLOBALS['srcdir'].'/htmlspecialchars.inc.php');
+/* for formData() */
+require_once($GLOBALS['srcdir'].'/formdata.inc.php');
 
 if (!acl_check('admin', 'super')) die(htmlspecialchars(xl('Not authorized')));
 
 // Prepare array of names of editable files, relative to the site directory.
 $my_files = array(
-  "clickoptions.txt",
-  "config.php",
-  "faxcover.txt",
-  "faxtitle.eps",
-  "referral_template.html",
-  "statement.inc.php",
-  "letter_templates/custom_pdf.php",
+  'config.php',
+  'faxcover.txt',
+  'faxtitle.eps',
+  'referral_template.html',
+  'statement.inc.php',
+  'letter_templates/custom_pdf.php',
 );
 // Append LBF plugin filenames to the array.
-$lres = sqlStatement("SELECT * FROM list_options " .
+$lres = sqlStatement('SELECT * FROM list_options ' .
   "WHERE list_id = 'lbfnames' ORDER BY seq, title");
 while ($lrow = sqlFetchArray($lres)) {
   $option_id = $lrow['option_id']; // should start with LBF
@@ -37,12 +39,13 @@ while ($lrow = sqlFetchArray($lres)) {
   $my_files[] = "LBF/$option_id.plugin.php";
 }
 
-$form_filename = $_REQUEST['form_filename'];
+$form_filename = strip_escape_custom($_REQUEST['form_filename']);
 // Sanity check to prevent evildoing.
 if (!in_array($form_filename, $my_files)) $form_filename = '';
 $filepath = "$OE_SITE_DIR/$form_filename";
 
-$imagedir = "$OE_SITE_DIR/images";
+$imagedir     = "$OE_SITE_DIR/images";
+$educationdir = "$OE_SITE_DIR/documents/education";
 
 if (!empty($_POST['bn_save'])) {
   if ($form_filename) {
@@ -54,7 +57,7 @@ if (!empty($_POST['bn_save'])) {
     $form_filename = '';
   }
 
-  // Handle uploads.
+  // Handle image uploads.
   if (is_uploaded_file($_FILES['form_image']['tmp_name']) && $_FILES['form_image']['size']) {
     $form_dest_filename = $_POST['form_dest_filename'];
     if ($form_dest_filename == '') {
@@ -75,12 +78,32 @@ if (!empty($_POST['bn_save'])) {
       die(htmlspecialchars(xl('Unable to create') . " '$imagepath'"));
     }
   }
+
+  // Handle PDF uploads for patient education.
+  if (is_uploaded_file($_FILES['form_education']['tmp_name']) && $_FILES['form_education']['size']) {
+    $form_dest_filename = $_FILES['form_education']['name'];
+    $form_dest_filename = strtolower(basename($form_dest_filename));
+    if (substr($form_dest_filename, -4) != '.pdf') {
+      die(xlt('Filename must end with ".pdf"'));
+    }
+    $educationpath = "$educationdir/$form_dest_filename";
+    // If the site's education directory does not yet exist, create it.
+    if (!is_dir($educationdir)) {
+      mkdir($educationdir);
+    }
+    if (is_file($educationpath)) unlink($educationpath);
+    $tmp_name = $_FILES['form_education']['tmp_name'];
+    if (!move_uploaded_file($tmp_name, $educationpath)) {
+      die(text(xl('Unable to create') . " '$educationpath'"));
+    }
+  }
+
 }
 ?>
 <html>
 
 <head>
-<title><?php echo htmlspecialchars(xl('File management')); ?></title>
+<title><?php echo xlt('File management'); ?></title>
 <link rel="stylesheet" href='<?php echo $css_header ?>' type='text/css'>
 
 <style type="text/css">
@@ -125,7 +148,7 @@ function msfFileChanged() {
 ?>
    </select>
    <br />
-   <textarea name='form_filedata' rows='30' style='width:100%'><?php
+   <textarea name='form_filedata' rows='25' style='width:100%'><?php
   if ($form_filename) {
     echo htmlspecialchars(@file_get_contents($filepath));
   }
@@ -163,6 +186,17 @@ function msfFileChanged() {
   }
 ?>
    </select>
+  </td>
+ </tr>
+
+ <tr bgcolor='#dddddd' class='dehead'>
+  <td colspan='2' align='center'><?php echo text(xl('Upload Patient Education PDF to') . " $educationdir"); ?></td>
+ </tr>
+ <tr>
+  <td valign='top' class='detail' nowrap>
+   <?php echo xlt('Source File'); ?>:
+   <input type="file" name="form_education" size="40" />&nbsp;
+   <?php echo xlt('Name must be like codetype_code_language.pdf, for example icd9_274.11_en.pdf'); ?>
   </td>
  </tr>
 

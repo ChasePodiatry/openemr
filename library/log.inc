@@ -3,18 +3,54 @@
 require_once(dirname(__FILE__). "/sql.inc");
 require_once(dirname(__FILE__). "/formdata.inc.php");
 
-function newEvent($event, $user, $groupname, $success, $comments="") {
+function newEvent($event, $user, $groupname, $success, $comments="", $patient_id=null, $log_from = 'open-emr', $menu_item = 'dashboard', $ccda_doc_id = 0) {
     $adodb = $GLOBALS['adodb']['db'];
     $crt_user=isset($_SERVER['SSL_CLIENT_S_DN_CN']) ?  $_SERVER['SSL_CLIENT_S_DN_CN'] : null;
+
+    // deal with comments encryption, if turned on
+    $encrypt_comment = 'No';
+    if (!empty($comments)) {
+        if ($GLOBALS["enable_auditlog_encryption"]) {
+            $comments =  aes256Encrypt($comments);
+            $encrypt_comment = 'Yes';
+        }
+    }
+    
+    if ($log_from == 'patient-portal') {
+        $sqlMenuItems = "SELECT * FROM patient_portal_menu";
+
+        $resMenuItems = sqlStatement($sqlMenuItems);
+        for($iter=0; $rowMenuItem=sqlFetchArray($resMenuItems); $iter++) {
+            $menuItems[$rowMenuItem['patient_portal_menu_id']] = $rowMenuItem['menu_name'];
+        }
+
+        $menuItemId = array_search($menu_item, $menuItems);
+        $sql = "insert into log ( date, event, user, patient_id, groupname, success, comments, 
+                log_from, menu_item_id, crt_user, ccda_doc_id) values ( NOW(), ?, ?, ?, ?, ?, ?, ?, ?,?, ?)";
+        $ret = sqlStatementNoLog($sql, array($event, $user, $patient_id, $groupname, $success, $comments,$log_from, $menuItemId,$crt_user, $ccda_doc_id));
+    } else {    
     /* More details added to the log */
-    $sql = "insert into log ( date, event, user, groupname, success, comments, crt_user) " .
+    $sql = "insert into log ( date, event, user, groupname, success, comments, crt_user, patient_id) " .
             "values ( NOW(), " . $adodb->qstr($event) . "," . $adodb->qstr($user) .
             "," . $adodb->qstr($groupname) . "," . $adodb->qstr($success) . "," .
             $adodb->qstr($comments) ."," .
-            $adodb->qstr($crt_user) .  ")";
+            $adodb->qstr($crt_user) ."," . $adodb->qstr($patient_id). ")";
 
     $ret = sqlInsertClean_audit($sql);
-    send_atna_audit_msg($user, $groupname, $event, 0, $success, $comments);
+    }
+
+    // Send item to log_comment_encrypt for comment encyption tracking
+    $last_log_id = $GLOBALS['adodb']['db']->Insert_ID();
+    $encryptLogQry = "INSERT INTO log_comment_encrypt (log_id, encrypt, checksum) ".
+                     " VALUES ( ".
+                     $adodb->qstr($last_log_id) . "," .
+                     $adodb->qstr($encrypt_comment) . "," .
+                     "'')";
+    sqlInsertClean_audit($encryptLogQry); 
+
+    if(($patient_id=="NULL") || ($patient_id==null))$patient_id=0;
+
+    send_atna_audit_msg($user, $groupname, $event, $patient_id, $success, $comments);
 }
 
 function getEventByDate($date, $user="", $cols="DISTINCT date, event, user, groupname, patient_id, success, comments, checksum")
@@ -42,13 +78,13 @@ function getEventByDate($date, $user="", $cols="DISTINCT date, event, user, grou
 function getEvents($params) 
 {
     // parse the parameters
-    $cols = "DISTINCT date, event, user, groupname, patient_id, success, comments,checksum,crt_user";
+    $cols = "DISTINCT date, event, user, groupname, patient_id, success, comments,checksum,crt_user, id ";
     if (isset($params['cols']) && $params['cols'] != "") $cols = $params['cols'];
 
-    $date1 = date("Y-m-d", time());
+    $date1 = date("Y-m-d H:i:s", time());
     if (isset($params['sdate']) && $params['sdate'] != "") $date1= $params['sdate'];
     
-    $date2 = date("Y-m-d", time());
+    $date2 = date("Y-m-d H:i:s", time());
     if (isset($params['edate']) && $params['edate'] != "") $date2= $params['edate'];
     
     $user = "";
@@ -75,7 +111,7 @@ function getEvents($params)
     if ($sortby == "success") $sortby = "";   //VicarePlus :: since there is no success field in extended_log
     if ($sortby == "checksum") $sortby = "";  //VicarePlus :: since there is no checksum field in extended_log
     $columns = "DISTINCT date, event, user, recipient,patient_id,description";
-    $sql = "SELECT $columns FROM extended_log WHERE date >= '$date1 00:00:00' AND date <= '$date2 23:59:59'";
+    $sql = "SELECT $columns FROM extended_log WHERE date >= '$date1' AND date <= '$date2'";
     if ($user != "") $sql .= " AND user LIKE '$user'";
     if ($patient != "") $sql .= " AND patient_id LIKE '$patient'";
     if ($levent != "") $sql .= " AND event LIKE '$levent%'";
@@ -85,7 +121,7 @@ function getEvents($params)
     else
     {
     // do the query
-    $sql = "SELECT $cols FROM log WHERE date >= '$date1 00:00:00' AND date <= '$date2 23:59:59'";
+    $sql = "SELECT $cols FROM log WHERE date >= '$date1' AND date <= '$date2'";
     if ($user != "") $sql .= " AND user LIKE '$user'";
     if ($patient != "") $sql .= " AND patient_id LIKE '$patient'";
     if ($levent != "") $sql .= " AND event LIKE '$levent%'";
@@ -121,7 +157,7 @@ function sql_checksum_of_modified_row($statement)
     /* Identifying the id for insert/replace statements for calculating the checksum */
         if((strcasecmp($tokens[0],"INSERT")==0) || (strcasecmp($tokens[0],"REPLACE")==0)){
         $table = $tokens[2];
-        $rid = mysql_insert_id($GLOBALS['dbh']);
+        $rid = generic_sql_insert_id();
 	/* For handling the table that doesn't have auto-increment column */
         if ($rid === 0 || $rid === FALSE) {
           if($table == "gacl_aco_map" || $table == "gacl_aro_groups_map" || $table == "gacl_aro_map" || $table == "gacl_axo_groups_map" || $table == "gacl_axo_map")
@@ -360,7 +396,7 @@ function create_rfc3881_msg($user, $group, $event, $patient_id, $outcome, $comme
     $patientCode = "";
     $patientDisplayName = "";
 
-    if ($eventIdDisplayName == 'Patient Record') {
+    if ($eventIDdisplayName == 'Patient Record') {
         $patientID = $patient_id;
         $pattientTypeCode = 1;
         $patientRole = 1;
@@ -580,6 +616,8 @@ function auditSQLEvent($statement, $outcome, $binds=NULL)
 		    "onotes" => "patient-record",
                     "prescriptions" => "order",
                     "transactions" => "patient-record",
+					"amendments" => "patient-record",
+					"amendments_history" => "patient-record",
                     "facility" => "security-administration",
                     "pharmacies" => "security-administration",
                     "addresses" => "security-administration",
@@ -700,7 +738,71 @@ function auditSQLEvent($statement, $outcome, $binds=NULL)
    
     // ViSolve : Don't log sequences - to avoid the affect due to GenID calls
     if (strpos($comments, "sequences") !== FALSE) return;
+	
+	$encrypt_comment = 'No';
+	//July 1, 2014: Ensoftek: Check and encrypt audit logging
+	if ($GLOBALS["enable_auditlog_encryption"]) {
+		$comments =  aes256Encrypt($comments);
+		$encrypt_comment = 'Yes';
+	}
+	
+	$current_datetime = date("Y-m-d H:i:s");
+    $SSL_CLIENT_S_DN_CN=isset($_SERVER['SSL_CLIENT_S_DN_CN']) ? $_SERVER['SSL_CLIENT_S_DN_CN'] : '';
+    $sql = "insert into log (date, event, user, groupname, comments, patient_id, success, checksum,crt_user) " .
+         "values ( ".
+		 $adodb->qstr($current_datetime). ", ".
+         $adodb->qstr($event) . ", " .
+         $adodb->qstr($user) . "," . 
+         $adodb->qstr($group) . "," .
+         $adodb->qstr($comments) . "," .
+         $adodb->qstr($pid) . "," .
+         $adodb->qstr($success) . "," . 
+         $adodb->qstr($checksum) . "," .
+         $adodb->qstr($SSL_CLIENT_S_DN_CN) .")";
+	sqlInsertClean_audit($sql);
+	
+	$last_log_id = $GLOBALS['adodb']['db']->Insert_ID();
+	$checksumGenerate = '';
+	//July 1, 2014: Ensoftek: Record the encryption checksum in a secondary table(log_comment_encrypt)
+	if ($querytype == 'update') {
+		$concatLogColumns = $current_datetime.$event.$user.$group.$comments.$pid.$success.$checksum.$SSL_CLIENT_S_DN_CN;
+		$checksumGenerate = sha1($concatLogColumns);
+	}
+	$encryptLogQry = "INSERT INTO log_comment_encrypt (log_id, encrypt, checksum) ".
+					 " VALUES ( ".
+					  $adodb->qstr($last_log_id) . "," .
+					  $adodb->qstr($encrypt_comment) . "," .
+					  $adodb->qstr($checksumGenerate) .")"; 
+	sqlInsertClean_audit($encryptLogQry);
+	
+    send_atna_audit_msg($user, $group, $event, $pid, $success, $comments);
+    //return $ret;
+}
 
+// May-29-2014: Ensoftek: For Auditable events and tamper-resistance (MU2)
+// Insert Audit Logging Status into the LOG table.
+function auditSQLAuditTamper($enable)
+{
+    $user =  isset($_SESSION['authUser']) ? $_SESSION['authUser'] : "";
+    $group = isset($_SESSION['authGroup']) ?  $_SESSION['authGroup'] : "";
+    $pid = 0;
+    $checksum = "";
+    $success = 1;
+	$event = "security-administration" . "-" . "insert";
+
+
+    $adodb = $GLOBALS['adodb']['db'];
+   
+	if ($enable == "1")
+	{
+		$comments = "Audit Logging Enabled.";
+	}
+	else
+	{
+		$comments = "Audit Logging Disabled.";
+	}
+	   
+    $SSL_CLIENT_S_DN_CN=isset($_SERVER['SSL_CLIENT_S_DN_CN']) ? $_SERVER['SSL_CLIENT_S_DN_CN'] : '';
     $sql = "insert into log (date, event, user, groupname, comments, patient_id, success, checksum,crt_user) " .
          "values ( NOW(), " . 
          $adodb->qstr($event) . ", " .
@@ -710,12 +812,12 @@ function auditSQLEvent($statement, $outcome, $binds=NULL)
          $adodb->qstr($pid) . "," .
          $adodb->qstr($success) . "," . 
          $adodb->qstr($checksum) . "," .
-         $adodb->qstr($_SERVER['SSL_CLIENT_S_DN_CN']) .")";
+         $adodb->qstr($SSL_CLIENT_S_DN_CN) .")";
 
     sqlInsertClean_audit($sql);
     send_atna_audit_msg($user, $group, $event, $pid, $success, $comments);
-    //return $ret;
 }
+
 /**
  * Record the patient disclosures.
  * @param $dates    - The date when the disclosures are sent to the thrid party.
@@ -761,7 +863,58 @@ function updateRecordedDisclosure($dates,$event,$recipient,$description,$disclos
  */
 function deleteDisclosure($deletelid)
 {
-        $sql="delete from extended_log where id='$deletelid'";
+        $sql="delete from extended_log where id='" . add_escape_custom($deletelid) . "'";
         $ret = sqlInsertClean_audit($sql);
+}
+
+//July 1, 2014: Ensoftek: Function to AES256 encrypt a given string
+function aes256Encrypt($sValue){
+	$sSecretKey = pack('H*', "bcb04b7e103a0cd8b54763051cef08bc55abe029fdebae5e1d417e2ffb2a00a3");
+    return rtrim(
+        base64_encode(
+            mcrypt_encrypt(
+                MCRYPT_RIJNDAEL_256,
+                $sSecretKey, $sValue, 
+                MCRYPT_MODE_ECB, 
+                mcrypt_create_iv(
+                    mcrypt_get_iv_size(
+                        MCRYPT_RIJNDAEL_256, 
+                        MCRYPT_MODE_ECB
+                    ), 
+                    MCRYPT_RAND)
+                )
+            ), "\0"
+        );
+}
+
+//July 1, 2014: Ensoftek: Function to AES256 decrypt a given string
+function aes256Decrypt($sValue){
+	$sSecretKey = pack('H*', "bcb04b7e103a0cd8b54763051cef08bc55abe029fdebae5e1d417e2ffb2a00a3");
+    return rtrim(
+        mcrypt_decrypt(
+            MCRYPT_RIJNDAEL_256, 
+            $sSecretKey, 
+            base64_decode($sValue), 
+            MCRYPT_MODE_ECB,
+            mcrypt_create_iv(
+                mcrypt_get_iv_size(
+                    MCRYPT_RIJNDAEL_256,
+                    MCRYPT_MODE_ECB
+                ), 
+                MCRYPT_RAND
+            )
+        ), "\0"
+    );
+}
+
+//July 1, 2014: Ensoftek: Utility function to get data from table(log_comment_encrypt)
+function logCommentEncryptData($log_id){
+	$encryptRow = array();
+	$logRes = sqlStatement("SELECT * FROM log_comment_encrypt WHERE log_id=?", array($log_id));
+	while($logRow = sqlFetchArray($logRes)){
+		$encryptRow['encrypt'] = $logRow['encrypt'];
+		$encryptRow['checksum'] = $logRow['checksum'];
+	}
+	return $encryptRow;
 }
 ?>

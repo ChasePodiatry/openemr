@@ -14,7 +14,7 @@ $alertmsg = '';
 if (!empty($_POST["form_pubpid"])) {
   $form_pubpid = trim($_POST["form_pubpid"]);
   $result = sqlQuery("SELECT count(*) AS count FROM patient_data WHERE " .
-    "pubpid = '$form_pubpid'");
+    "pubpid = '" . formDataCore($form_pubpid) . "'");
   if ($result['count']) {
     // Error, not unique.
     $alertmsg = xl('Warning: Patient ID is not unique!');
@@ -49,6 +49,7 @@ $newdata['patient_data' ] = array();
 $newdata['employer_data'] = array();
 $fres = sqlStatement("SELECT * FROM layout_options " .
   "WHERE form_id = 'DEM' AND uor > 0 AND field_id != '' " .
+  "OR field_id = 'pubpid' " .
   "ORDER BY group_name, seq");
 while ($frow = sqlFetchArray($fres)) {
   $data_type = $frow['data_type'];

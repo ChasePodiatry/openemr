@@ -1,38 +1,31 @@
 <?php       
-//  ------------------------------------------------------------------------ //
-//                OpenEMR Electronic Medical Records System                  //
-//                 Copyright (c) 2012 tajemo.co.za                      //
-//                     <http://www.tajemo.co.za/>                            //
-//  ------------------------------------------------------------------------ //
-//  This program is free software; you can redistribute it and/or modify     //
-//  it under the terms of the GNU General Public License as published by     //
-//  the Free Software Foundation; either version 2 of the License, or        //
-//  (at your option) any later version.                                      //
-//                                                                           //
-//  You may not change or alter any portion of this comment or credits       //
-//  of supporting developers from this source code or any supporting         //
-//  source code which is considered copyrighted (c) material of the          //
-//  original comment or credit authors.                                      //
-//                                                                           //
-//  This program is distributed in the hope that it will be useful,          //
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of           //
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the            //
-//  GNU General Public License for more details.                             //
-//                                                                           //
-//  You should have received a copy of the GNU General Public License        //
-//  along with this program; if not, write to the Free Software              //
-//  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA // 
-// --------------------------------------------------------------------------//
-// Original Author of this file: Craig Bezuidenhout (Tajemo Enterprises)     //
-// Purpose of this file: Contains functions used in the dated reminders      //
-// --------------------------------------------------------------------------//
- require_once("$srcdir/htmlspecialchars.inc.php");
+/**
+ * Contains functions used in the dated reminders.
+ *
+ * Copyright (C) 2012 tajemo.co.za <http://www.tajemo.co.za/>
+ *
+ * LICENSE: This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 3
+ * of the License, or (at your option) any later version.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://opensource.org/licenses/gpl-license.php>;.
+ *
+ * @package OpenEMR
+ * @author  Craig Bezuidenhout <http://www.tajemo.co.za/>
+ * @link    http://www.open-emr.org
+ */
 
-// ------------------------------------------------
-// @ RemindersArray function
-// @ returns array with reminders for specified user, defaults to current user if none specified
-// ------------------------------------------------   
-   function RemindersArray($days_to_show,$today,$alerts_to_show,$userID = false){
+/**
+ * RemindersArray function
+ *
+ * @returns array reminders for specified user, defaults to current user if none specified
+ */
+function RemindersArray($days_to_show,$today,$alerts_to_show,$userID = false){
         if(!$userID) $userID = $_SESSION['authId'];    
         global $hasAlerts;
 // ----- define a blank reminders array
@@ -88,10 +81,15 @@
 
 
 
-// ------------------------------------------------
-// @ GetDueReminder function
-// @ returns int with number of due reminders for specified user, defaults to current user if none specified
-// ------------------------------------------------   
+/**
+ * This function is used to get a count of the number of reminders due for a specified
+ * user.
+ *
+ * @param $days_to_show
+ * @param $today
+ * @param defaults to current user if none specified
+ * @returns int with number of due reminders for specified user
+ */
    function GetDueReminderCount($days_to_show,$today,$userID = false){
         if(!$userID) $userID = $_SESSION['authId']; 
         
@@ -105,7 +103,7 @@
                             AND dr.`message_processed` = 0
                             AND dr.`dr_message_due_date` < ADDDATE(NOW(), INTERVAL $days_to_show DAY)"
                             , array($userID)
-                            );                       
+                            );
         
           $drRow=sqlFetchArray($drSQL);  
           return $drRow['c'];

@@ -1,8 +1,23 @@
 <?php
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either version 2
-// of the License, or (at your option) any later version.
+/**
+ *
+ * Patient summary screen.
+ *
+ * LICENSE: This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 3
+ * of the License, or (at your option) any later version.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://opensource.org/licenses/gpl-license.php>;.
+ *
+ * @package OpenEMR
+ * @author  Brady Miller <brady@sparmy.com>
+ * @link    http://www.open-emr.org
+ */
 
 //SANITIZE ALL ESCAPES
 $sanitize_all_escapes=true;
@@ -22,17 +37,40 @@ $fake_register_globals=false;
  require_once("../history/history.inc.php");
  require_once("$srcdir/formatting.inc.php");
  require_once("$srcdir/edi.inc");
+ require_once("$srcdir/invoice_summary.inc.php");
  require_once("$srcdir/clinical_rules.php");
-
+ require_once("$srcdir/options.js.php");
+ ////////////
+ require_once(dirname(__FILE__)."/../../../library/appointments.inc.php");
+ 
   if ($GLOBALS['concurrent_layout'] && isset($_GET['set_pid'])) {
   include_once("$srcdir/pid.inc");
   setpid($_GET['set_pid']);
  }
 
   $active_reminders = false;
-  if ((!isset($_SESSION['alert_notify_pid']) || ($_SESSION['alert_notify_pid'] != $pid)) && isset($_GET['set_pid']) && acl_check('patients', 'med') && $GLOBALS['enable_cdr'] && $GLOBALS['enable_cdr_crp']) {
-    // showing a new patient, so check for active reminders
-    $active_reminders = active_alert_summary($pid,"reminders-due");
+  $all_allergy_alerts = false;
+  if ($GLOBALS['enable_cdr']) {
+    //CDR Engine stuff
+    if ($GLOBALS['enable_allergy_check'] && $GLOBALS['enable_alert_log']) {
+      //Check for new allergies conflicts and throw popup if any exist(note need alert logging to support this)
+      $new_allergy_alerts = allergy_conflict($pid,'new',$_SESSION['authUser']);
+      if (!empty($new_allergy_alerts)) {
+        $pop_warning = '<script type="text/javascript">alert(\'' . xls('WARNING - FOLLOWING ACTIVE MEDICATIONS ARE ALLERGIES') . ':\n';
+        foreach ($new_allergy_alerts as $new_allergy_alert) {
+          $pop_warning .= addslashes($new_allergy_alert) . '\n';
+        }
+        $pop_warning .= '\')</script>';
+        echo $pop_warning;
+      }
+    }
+    if ((!isset($_SESSION['alert_notify_pid']) || ($_SESSION['alert_notify_pid'] != $pid)) && isset($_GET['set_pid']) && $GLOBALS['enable_cdr_crp']) {
+      // showing a new patient, so check for active reminders and allergy conflicts, which use in active reminder popup
+      $active_reminders = active_alert_summary($pid,"reminders-due",'','default',$_SESSION['authUser'],TRUE);
+      if ($GLOBALS['enable_allergy_check']) {
+        $all_allergy_alerts = allergy_conflict($pid,'all',$_SESSION['authUser'],TRUE);
+      }
+    }
   }
 
 function print_as_money($money) {
@@ -147,9 +185,9 @@ if ($result3['provider']) {   // Use provider in case there is an ins record w/ 
 <script type="text/javascript" language="JavaScript">
 
  var mypcc = '<?php echo htmlspecialchars($GLOBALS['phone_country_code'],ENT_QUOTES); ?>';
-
- function oldEvt(eventid) {
-  dlgopen('../../main/calendar/add_edit_event.php?eid=' + eventid, '_blank', 550, 350);
+ //////////
+ function oldEvt(apptdate, eventid) {
+  dlgopen('../../main/calendar/add_edit_event.php?date=' + apptdate + '&eid=' + eventid, '_blank', 775, 375);
  }
 
  function advdirconfigure() {
@@ -202,7 +240,7 @@ if ($GLOBALS['athletic_team']) {
  }
 
  function newEvt() {
-  dlgopen('../../main/calendar/add_edit_event.php?patientid=<?php echo htmlspecialchars($pid,ENT_QUOTES); ?>', '_blank', 550, 350);
+  dlgopen('../../main/calendar/add_edit_event.php?patientid=<?php echo htmlspecialchars($pid,ENT_QUOTES); ?>', '_blank', 775, 375);
   return false;
  }
 
@@ -330,6 +368,12 @@ $(document).ready(function(){
     $("#vitals_ps_expand").load("vitals_fragment.php");
 <?php } ?>
 
+    // Initialize track_anything
+    $("#track_anything_ps_expand").load("track_anything_fragment.php");
+    
+    
+    // Initialize labdata
+    $("#labdata_ps_expand").load("labdata_fragment.php");
 <?php
   // Initialize for each applicable LBF form.
   $gfres = sqlStatement("SELECT option_id FROM list_options WHERE " .
@@ -374,12 +418,12 @@ $(document).ready(function(){
   $(".small_modal").fancybox( {
 	'overlayOpacity' : 0.0,
 	'showCloseButton' : true,
-	'frameHeight' : 180,
+	'frameHeight' : 200,
 	'frameWidth' : 380,
             'centerOnScroll' : false
   });
 
-  <?php if ($active_reminders) { ?>
+  <?php if ($active_reminders || $all_allergy_alerts) { ?>
     // show the active reminder modal
     $("#reminder_popup_link").fancybox({
       'overlayOpacity' : 0.0,
@@ -404,7 +448,7 @@ function setMyPatient() {
 <?php if (isset($_GET['set_pid'])) { ?>
  parent.left_nav.setPatient(<?php echo "'" . htmlspecialchars(($result['fname']) . " " . ($result['lname']),ENT_QUOTES) .
    "'," . htmlspecialchars($pid,ENT_QUOTES) . ",'" . htmlspecialchars(($result['pubpid']),ENT_QUOTES) .
-   "','', ' " . htmlspecialchars(xl('DOB') . ": " . oeFormatShortDate($result['DOB_YMD']) . " " . xl('Age') . ": " . getPatientAge($result['DOB_YMD']), ENT_QUOTES) . "'"; ?>);
+   "','', ' " . htmlspecialchars(xl('DOB') . ": " . oeFormatShortDate($result['DOB_YMD']) . " " . xl('Age') . ": " . getPatientAgeDisplay($result['DOB_YMD']), ENT_QUOTES) . "'"; ?>);
  var EncounterDateArray = new Array;
  var CalendarCategoryArray = new Array;
  var EncounterIdArray = new Array;
@@ -428,6 +472,15 @@ function setMyPatient() {
 <?php } // end setting new pid ?>
  parent.left_nav.setRadio(window.name, 'dem');
  parent.left_nav.syncRadios();
+<?php if ( (isset($_GET['set_pid']) ) && (isset($_GET['set_encounterid'])) && ( intval($_GET['set_encounterid']) > 0 ) ) {
+ $encounter = intval($_GET['set_encounterid']);
+ $_SESSION['encounter'] = $encounter; 
+ $query_result = sqlQuery("SELECT `date` FROM `form_encounter` WHERE `encounter` = ?", array($encounter)); ?>
+ var othername = (window.name == 'RTop') ? 'RBot' : 'RTop';
+ parent.left_nav.setEncounter('<?php echo oeFormatShortDate(date("Y-m-d", strtotime($query_result['date']))); ?>', '<?php echo attr($encounter); ?>', othername);
+ parent.left_nav.setRadio(othername, 'enc');
+ parent.frames[othername].location.href = '../encounter/encounter_top.php?set_encounter=' + <?php echo attr($encounter);?> + '&pid=' + <?php echo attr($pid);?>;
+<?php } // end setting new encounter id (only if new pid is also set) ?>
 <?php } // end concurrent layout ?>
 }
 
@@ -456,21 +509,19 @@ $(window).load(function() {
   if ($result['squad'] && ! acl_check('squads', $result['squad']))
    $thisauth = 0;
  }
-
  if (!$thisauth) {
   echo "<p>(" . htmlspecialchars(xl('Demographics not authorized'),ENT_NOQUOTES) . ")</p>\n";
   echo "</body>\n</html>\n";
   exit();
  }
-
  if ($thisauth) {
   echo "<table><tr><td><span class='title'>" .
    htmlspecialchars(getPatientName($pid),ENT_NOQUOTES) .
    "</span></td>";
 
-  if (acl_check('admin', 'super')) {
+  if (acl_check('admin', 'super') && $GLOBALS['allow_pat_delete']) {
    echo "<td style='padding-left:1em;'><a class='css_button iframe' href='../deleter.php?patient=" . 
-    htmlspecialchars($pid,ENT_QUOTES) . "'>" .
+    htmlspecialchars($pid,ENT_QUOTES) . "' onclick='top.restoreSession()'>" .
     "<span>".htmlspecialchars(xl('Delete'),ENT_NOQUOTES).
     "</span></a></td>";
   }
@@ -555,14 +606,59 @@ if ($GLOBALS['patient_id_category_name']) {
 |
 <a href="stats_full.php?active=all" onclick='top.restoreSession()'>
 <?php echo htmlspecialchars(xl('Issues'),ENT_NOQUOTES); ?></a>
+|
+<a href="../../reports/pat_ledger.php?form=1&patient_id=<?php echo attr($pid);?>" onclick='top.restoreSession()'>
+<?php echo xlt('Ledger'); ?></a>
+|
+<a href="../../reports/external_data.php" onclick='top.restoreSession()'>
+<?php echo xlt('External Data'); ?></a>
+
+<!-- DISPLAYING HOOKS STARTS HERE -->
+<?php
+	$module_query = sqlStatement("SELECT msh.*,ms.menu_name,ms.path,m.mod_ui_name,m.type FROM modules_hooks_settings AS msh
+					LEFT OUTER JOIN modules_settings AS ms ON obj_name=enabled_hooks AND ms.mod_id=msh.mod_id
+					LEFT OUTER JOIN modules AS m ON m.mod_id=ms.mod_id 
+					WHERE fld_type=3 AND mod_active=1 AND sql_run=1 AND attached_to='demographics' ORDER BY mod_id");
+	$DivId = 'mod_installer';
+	if (sqlNumRows($module_query)) {
+		$jid 	= 0;
+		$modid 	= '';
+		while ($modulerow = sqlFetchArray($module_query)) {
+			$DivId 		= 'mod_'.$modulerow['mod_id'];
+			$new_category 	= $modulerow['mod_ui_name'];
+			$modulePath 	= "";
+			$added      	= "";
+			if($modulerow['type'] == 0) {
+				$modulePath 	= $GLOBALS['customModDir'];
+				$added		= "";
+			}
+			else{ 	
+				$added		= "index";
+				$modulePath 	= $GLOBALS['zendModDir'];
+			}
+			$relative_link 	= "../../modules/".$modulePath."/".$modulerow['path'];
+			$nickname 	= $modulerow['menu_name'] ? $modulerow['menu_name'] : 'Noname';
+			$jid++;
+			$modid = $modulerow['mod_id'];			
+			?>
+			|
+			<a href="<?php echo $relative_link; ?>" onclick='top.restoreSession()'>
+			<?php echo htmlspecialchars($nickname,ENT_NOQUOTES); ?></a>
+		<?php	
+		}
+	}
+	?>
+<!-- DISPLAYING HOOKS ENDS HERE -->
+
   </td>
  </tr>
+ 
 </table> <!-- end header -->
 
 <div style='margin-top:10px'> <!-- start main content div -->
  <table border="0" cellspacing="0" cellpadding="0" width="100%">
   <tr>
-   <td align="left" valign="top">
+      <td class="demographics-box" align="left" valign="top">
     <!-- start left column div -->
     <div style='float:left; margin-right:20px'>
      <table cellspacing=0 cellpadding=0>
@@ -591,33 +687,46 @@ expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel,
 ?>
         <br>
 <?php
+		//PATIENT BALANCE,INS BALANCE naina@capminds.com
+		$patientbalance = get_patient_balance($pid, false);
+		//Debit the patient balance from insurance balance
+		$insurancebalance = get_patient_balance($pid, true) - $patientbalance;
+	   $totalbalance=$patientbalance + $insurancebalance;
  if ($GLOBALS['oer_config']['ws_accounting']['enabled']) {
  // Show current balance and billing note, if any.
-  echo "        <div style='margin-left: 10px; margin-right: 10px'>" .
-   "<span class='bold'><font color='#ee6600'>" .
-   htmlspecialchars(xl('Balance Due'),ENT_NOQUOTES) .
-   ": " . htmlspecialchars(oeFormatMoney(get_patient_balance($pid)),ENT_NOQUOTES) .
-   "</font></span><br>";
-  if ($result['genericname2'] == 'Billing') {
-   echo "<span class='bold'><font color='red'>" .
-    htmlspecialchars(xl('Billing Note'),ENT_NOQUOTES) . ":" .
-    htmlspecialchars($result['genericval2'],ENT_NOQUOTES) .
-    "</font></span><br>";
+  echo "<table border='0'><tr><td>" .
+  "<table ><tr><td><span class='bold'><font color='red'>" .
+   xlt('Patient Balance Due') .
+   " : " . text(oeFormatMoney($patientbalance)) .
+   "</font></span></td></tr>".
+     "<tr><td><span class='bold'><font color='red'>" .
+   xlt('Insurance Balance Due') .
+   " : " . text(oeFormatMoney($insurancebalance)) .
+   "</font></span></td></tr>".
+   "<tr><td><span class='bold'><font color='red'>" .
+   xlt('Total Balance Due').
+   " : " . text(oeFormatMoney($totalbalance)) .
+   "</font></span></td></td></tr>";
+ if (!empty($result['billing_note'])) {
+   echo "<tr><td><span class='bold'><font color='red'>" .
+    xlt('Billing Note') . ":" .
+    text($result['billing_note']) .
+    "</font></span></td></tr>";
   } 
   if ($result3['provider']) {   // Use provider in case there is an ins record w/ unassigned insco
-   echo "<span class='bold'>" .
-    htmlspecialchars(xl('Primary Insurance'),ENT_NOQUOTES) . ': ' . htmlspecialchars($insco_name,ENT_NOQUOTES) .
+   echo "<tr><td><span class='bold'>" .
+    xlt('Primary Insurance') . ': ' . text($insco_name) .
     "</span>&nbsp;&nbsp;&nbsp;";
    if ($result3['copay'] > 0) {
     echo "<span class='bold'>" .
-     htmlspecialchars(xl('Copay'),ENT_NOQUOTES) . ': ' .  htmlspecialchars($result3['copay'],ENT_NOQUOTES) .
+    xlt('Copay') . ': ' .  text($result3['copay']) .
      "</span>&nbsp;&nbsp;&nbsp;";
    }
    echo "<span class='bold'>" .
-    htmlspecialchars(xl('Effective Date'),ENT_NOQUOTES) . ': ' .  htmlspecialchars(oeFormatShortDate($result3['effdate'],ENT_NOQUOTES)) .
-    "</span>";
+    xlt('Effective Date') . ': ' .  text(oeFormatShortDate($result3['effdate'])) .
+    "</span></td></tr>";
   }
-  echo "</div><br>";
+  echo "</table></td></tr></td></tr></table><br>";
  }
 ?>
         </div> <!-- required for expand_collapse_widget -->
@@ -634,7 +743,7 @@ $widgetButtonLink = "demographics_full.php";
 $widgetButtonClass = "";
 $linkMethod = "html";
 $bodyClass = "";
-$widgetAuth = ($thisauth == "write");
+$widgetAuth = acl_check('patients', 'demo', '', 'write');
 $fixedWidth = true;
 expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel,
   $widgetButtonLink, $widgetButtonClass, $linkMethod, $bodyClass,
@@ -676,7 +785,7 @@ if ( $insurance_count > 0 ) {
   $widgetButtonClass = "";
   $linkMethod = "html";
   $bodyClass = "";
-  $widgetAuth = ($thisauth == "write");
+  $widgetAuth = acl_check('patients', 'demo', '', 'write');
   $fixedWidth = true;
   expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel,
     $widgetButtonLink, $widgetButtonClass, $linkMethod, $bodyClass,
@@ -922,6 +1031,77 @@ expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel,
                 </div>
      </td>
     </tr>		
+<?php if ($GLOBALS['amendments']) { ?>
+  <tr>
+       <td width='650px'>
+       	<?php // Amendments widget
+       	$widgetTitle = xlt('Amendments');
+    $widgetLabel = "amendments";
+    $widgetButtonLabel = xlt("Edit");
+	$widgetButtonLink = $GLOBALS['webroot'] . "/interface/patient_file/summary/main_frameset.php?feature=amendment";
+	$widgetButtonClass = "iframe rx_modal";
+    $linkMethod = "html";
+    $bodyClass = "summary_item small";
+    $widgetAuth = true;
+    $fixedWidth = false;
+    expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel , $widgetButtonLink, $widgetButtonClass, $linkMethod, $bodyClass, $widgetAuth, $fixedWidth);
+       	$sql = "SELECT * FROM amendments WHERE pid = ? ORDER BY amendment_date DESC";
+  $result = sqlStatement($sql, array($pid) );
+
+  if (sqlNumRows($result) == 0) {
+    echo " <table><tr>\n";
+    echo "  <td colspan='$numcols' class='text'>&nbsp;&nbsp;" . xlt('None') . "</td>\n";
+    echo " </tr></table>\n";
+  }
+  
+  while ($row=sqlFetchArray($result)){
+    echo "&nbsp;&nbsp;";
+    echo "<a class= '" . $widgetButtonClass . "' href='" . $widgetButtonLink . "&id=" . attr($row['amendment_id']) . "' onclick='top.restoreSession()'>" . text($row['amendment_date']);
+	echo "&nbsp; " . text($row['amendment_desc']);
+
+    echo "</a><br>\n";
+  } ?>
+  </td>
+    </tr>
+<?php } ?>    		
+ <?php // labdata ?>
+    <tr>
+     <td width='650px'>
+<?php // labdata expand collapse widget
+  $widgetTitle = xl("Labs");
+  $widgetLabel = "labdata";
+  $widgetButtonLabel = xl("Trend");
+  $widgetButtonLink = "../summary/labdata.php";#"../encounter/trend_form.php?formname=labdata";
+  $widgetButtonClass = "";
+  $linkMethod = "html";
+  $bodyClass = "notab";
+  // check to see if any labdata exist
+  $spruch = "SELECT procedure_report.date_collected AS date " .
+			"FROM procedure_report " . 
+			"JOIN procedure_order ON  procedure_report.procedure_order_id = procedure_order.procedure_order_id " . 
+			"WHERE procedure_order.patient_id = ? " . 
+			"ORDER BY procedure_report.date_collected DESC ";
+  $existLabdata = sqlQuery($spruch, array($pid) );	
+  if ($existLabdata) {
+    $widgetAuth = true;
+  }
+  else {
+    $widgetAuth = false;
+  }
+  $fixedWidth = true;
+  expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel,
+    $widgetButtonLink, $widgetButtonClass, $linkMethod, $bodyClass,
+    $widgetAuth, $fixedWidth);
+?>
+      <br/>
+      <div style='margin-left:10px' class='text'><img src='../../pic/ajax-loader.gif'/></div><br/>
+      </div>
+     </td>
+    </tr>
+<?php  // end labdata ?>
+
+
+
 
 <?php if ($vitals_is_registered && acl_check('patients', 'med')) { ?>
     <tr>
@@ -1079,7 +1259,7 @@ expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel,
               $idDoc = $myrows4['id'];
               echo "<a href='$web_root/controller.php?document&retrieve&patient_id=" .
                     htmlspecialchars($pid,ENT_QUOTES) . "&document_id=" .
-                    htmlspecialchars($idDoc,ENT_QUOTES) . "&as_file=true'>" .
+                    htmlspecialchars($idDoc,ENT_QUOTES) . "&as_file=true' onclick='top.restoreSession()'>" .
                     htmlspecialchars(xl_document_category($nameDoc),ENT_NOQUOTES) . "</a> " .
                     htmlspecialchars($dateDoc,ENT_NOQUOTES);
               echo "<br>";
@@ -1174,71 +1354,145 @@ expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel,
 
 	// Show current and upcoming appointments.
 	if (isset($pid) && !$GLOBALS['disable_calendar']) {
-	 $query = "SELECT e.pc_eid, e.pc_aid, e.pc_title, e.pc_eventDate, " .
-	  "e.pc_startTime, e.pc_hometext, u.fname, u.lname, u.mname, " .
-	  "c.pc_catname " .
-	  "FROM openemr_postcalendar_events AS e, users AS u, " .
-	  "openemr_postcalendar_categories AS c WHERE " .
-	  "e.pc_pid = ? AND e.pc_eventDate >= CURRENT_DATE AND " .
-	  "u.id = e.pc_aid AND e.pc_catid = c.pc_catid " .
-	  "ORDER BY e.pc_eventDate, e.pc_startTime";
-	 $res = sqlStatement($query, array($pid) );
+        // 
+        $current_date2 = date('Y-m-d');
+        $events = array();
+        $apptNum = (int)$GLOBALS['number_of_appts_to_show'];
+        if($apptNum != 0) $apptNum2 = abs($apptNum);
+        else $apptNum2 = 10;
+        $events = fetchNextXAppts($current_date2, $pid, $apptNum2);
+        $events = sortAppointments($events);
+        //////
 
-        if ( (acl_check('patients', 'med')) && ($GLOBALS['enable_cdr'] && $GLOBALS['enable_cdr_crw']) ) {
-          // clinical summary expand collapse widget
-	  $widgetTitle = xl("Clinical Reminders");
-	  $widgetLabel = "clinical_reminders";
-	  $widgetButtonLabel = xl("Edit");
-	  $widgetButtonLink = "../reminder/clinical_reminders.php?patient_id=".$pid;;
-	  $widgetButtonClass = "";
-	  $linkMethod = "html";
-	  $bodyClass = "summary_item small";
-	  $widgetAuth = true;
-	  $fixedWidth = false;
-	  expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel , $widgetButtonLink, $widgetButtonClass, $linkMethod, $bodyClass, $widgetAuth, $fixedWidth);
-          echo "<br/>";
-          echo "<div style='margin-left:10px' class='text'><image src='../../pic/ajax-loader.gif'/></div><br/>";
-	  echo "</div>";
+     // Show Clinical Reminders for any user that has rules that are permitted.
+     $clin_rem_check = resolve_rules_sql('','0',TRUE,'',$_SESSION['authUser']); 
+     if ( (!empty($clin_rem_check)) && ($GLOBALS['enable_cdr'] && $GLOBALS['enable_cdr_crw']) ) {
+        // clinical summary expand collapse widget
+        $widgetTitle = xl("Clinical Reminders");
+        $widgetLabel = "clinical_reminders";
+        $widgetButtonLabel = xl("Edit");
+        $widgetButtonLink = "../reminder/clinical_reminders.php?patient_id=".$pid;;
+        $widgetButtonClass = "";
+        $linkMethod = "html";
+        $bodyClass = "summary_item small";
+        $widgetAuth = true;
+        $fixedWidth = false;
+        expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel , $widgetButtonLink, $widgetButtonClass, $linkMethod, $bodyClass, $widgetAuth, $fixedWidth);
+        echo "<br/>";
+        echo "<div style='margin-left:10px' class='text'><image src='../../pic/ajax-loader.gif'/></div><br/>";
+        echo "</div>";
         } // end if crw
 
 	// appointments expand collapse widget
-	$widgetTitle = xl("Appointments");
-	$widgetLabel = "appointments";
-	$widgetButtonLabel = xl("Add");
-	$widgetButtonLink = "return newEvt();";
-	$widgetButtonClass = "";
-	$linkMethod = "javascript";
-	$bodyClass = "summary_item small";
-	$widgetAuth = (isset($res) && $res != null);
-	$fixedWidth = false;
-	expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel , $widgetButtonLink, $widgetButtonClass, $linkMethod, $bodyClass, $widgetAuth, $fixedWidth);
+        $widgetTitle = xl("Appointments");
+        $widgetLabel = "appointments";
+        $widgetButtonLabel = xl("Add");
+        $widgetButtonLink = "return newEvt();";
+        $widgetButtonClass = "";
+        $linkMethod = "javascript";
+        $bodyClass = "summary_item small";
+        $widgetAuth = $resNotNull; // $resNotNull refects state of query (appts) in fetchAppointments()
+        $fixedWidth = false;
+        expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel , $widgetButtonLink, $widgetButtonClass, $linkMethod, $bodyClass, $widgetAuth, $fixedWidth);
+        $count = 0;
+        foreach($events as $row) { //////
+            $count++;
+            $dayname = date("D", strtotime($row['pc_eventDate'])); //////
+            $dispampm = "am";
+            $disphour = substr($row['pc_startTime'], 0, 2) + 0;
+            $dispmin  = substr($row['pc_startTime'], 3, 2);
+            if ($disphour >= 12) {
+                $dispampm = "pm";
+                if ($disphour > 12) $disphour -= 12;
+            }
+            $etitle = xl('(Click to edit)');
+            if ($row['pc_hometext'] != "") {
+                $etitle = xl('Comments').": ".($row['pc_hometext'])."\r\n".$etitle;
+            }
+            ////////////
+            echo "<a href='javascript:oldEvt(" . htmlspecialchars(preg_replace("/-/", "", $row['pc_eventDate']),ENT_QUOTES) . ', ' . htmlspecialchars($row['pc_eid'],ENT_QUOTES) . ")' title='" . htmlspecialchars($etitle,ENT_QUOTES) . "'>";
+            ////////////
+            echo "<b>" . htmlspecialchars($row['pc_eventDate'] . " (" . xl($dayname),ENT_NOQUOTES) . ")</b><br>";
+            echo htmlspecialchars("$disphour:$dispmin " . xl($dispampm),ENT_NOQUOTES) . " ";
+            if ($row['pc_recurrtype']) echo "<img src='" . $GLOBALS['webroot'] . "/interface/main/calendar/modules/PostCalendar/pntemplates/default/images/repeating8.png' border='0' style='margin:0px 2px 0px 2px;' title='".htmlspecialchars(xl("Repeating event"),ENT_QUOTES)."' alt='".htmlspecialchars(xl("Repeating event"),ENT_QUOTES)."'>";
+            echo "<span title='" . generate_display_field(array('data_type'=>'1','list_id'=>'apptstat'),$row['pc_apptstatus']) . "'> ( " . htmlspecialchars($row['pc_apptstatus'],ENT_NOQUOTES) . " )</span>";
+            if ($row['pc_hometext']) echo "<font color='green'> CMT</font>";
+            echo "<br>" . htmlspecialchars(xl_appt_category($row['pc_catname']),ENT_NOQUOTES) . "<br>\n";
+            echo htmlspecialchars($row['ufname'] . " " . $row['ulname'],ENT_NOQUOTES) . "</a><br>\n";
+        }
+        if ($resNotNull) { //////
+            if ( $count < 1 ) { 
+                echo "&nbsp;&nbsp;" . htmlspecialchars(xl('None'),ENT_NOQUOTES); 
+            }
+            echo "</div>";
+        }
+      }
+            
+	// Show PAST appointments.
+	// added by Terry Hill to allow reverse sorting of the appointments
+ 	$direction = "ASC";
+	if ($GLOBALS['num_past_appointments_to_show'] < 0) {
+	   $direction = "DESC";
+	   ($showpast = -1 * $GLOBALS['num_past_appointments_to_show'] );
+	   }
+	   else
+	   {
+	   $showpast = $GLOBALS['num_past_appointments_to_show'];
+	   }
+	   
+	if (isset($pid) && !$GLOBALS['disable_calendar'] && $showpast > 0) {
+	 $query = "SELECT e.pc_eid, e.pc_aid, e.pc_title, e.pc_eventDate, " .
+	  "e.pc_startTime, e.pc_hometext, u.fname, u.lname, u.mname, " .
+	  "c.pc_catname, e.pc_apptstatus " .
+	  "FROM openemr_postcalendar_events AS e, users AS u, " .
+	  "openemr_postcalendar_categories AS c WHERE " .
+	  "e.pc_pid = ? AND e.pc_eventDate < CURRENT_DATE AND " .
+	  "u.id = e.pc_aid AND e.pc_catid = c.pc_catid " .
+	  "ORDER BY e.pc_eventDate $direction , e.pc_startTime DESC " . 
+      "LIMIT " . $showpast;
+	
+     $pres = sqlStatement($query, array($pid) );
 
-			 $count = 0;
-			 while($row = sqlFetchArray($res)) {
-			  $count++;
-			  $dayname = date("l", strtotime($row['pc_eventDate']));
-			  $dispampm = "am";
-			  $disphour = substr($row['pc_startTime'], 0, 2) + 0;
-			  $dispmin  = substr($row['pc_startTime'], 3, 2);
-			  if ($disphour >= 12) {
-			   $dispampm = "pm";
-			   if ($disphour > 12) $disphour -= 12;
-			  }
-			  $etitle = xl('(Click to edit)');
-			  if ($row['pc_hometext'] != "") {
-				$etitle = xl('Comments').": ".($row['pc_hometext'])."\r\n".$etitle;
-			  }
-              echo "<a href='javascript:oldEvt(" . htmlspecialchars($row['pc_eid'],ENT_QUOTES) .
-		")' title='" . htmlspecialchars($etitle,ENT_QUOTES) . "'>";
-			  echo "<b>" . htmlspecialchars(xl($dayname) . ", " . $row['pc_eventDate'],ENT_NOQUOTES) . "</b><br>";
-			  echo htmlspecialchars("$disphour:$dispmin " . xl($dispampm) . " " . xl_appt_category($row['pc_catname']),ENT_NOQUOTES) . "<br>\n";
-			  echo htmlspecialchars($row['fname'] . " " . $row['lname'],ENT_NOQUOTES) . "</a><br>\n";
-			 }
-			 if (isset($res) && $res != null) {
-				if ( $count < 1 ) { echo "&nbsp;&nbsp;" . htmlspecialchars(xl('None'),ENT_NOQUOTES); }
-				echo "</div>";
-			 }
-			}
+	// appointments expand collapse widget
+        $widgetTitle = xl("Past Appoinments");
+        $widgetLabel = "past_appointments";
+        $widgetButtonLabel = '';
+        $widgetButtonLink = '';
+        $widgetButtonClass = '';
+        $linkMethod = "javascript";
+        $bodyClass = "summary_item small";
+        $widgetAuth = false; //no button
+        $fixedWidth = false;
+        expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel , $widgetButtonLink, $widgetButtonClass, $linkMethod, $bodyClass, $widgetAuth, $fixedWidth);   
+        $count = 0;
+        while($row = sqlFetchArray($pres)) {
+            $count++;
+            $dayname = date("l", strtotime($row['pc_eventDate']));
+            $dispampm = "am";
+            $disphour = substr($row['pc_startTime'], 0, 2) + 0;
+            $dispmin  = substr($row['pc_startTime'], 3, 2);
+            if ($disphour >= 12) {
+                $dispampm = "pm";
+                if ($disphour > 12) $disphour -= 12;
+            }
+            if ($row['pc_hometext'] != "") {
+                $etitle = xl('Comments').": ".($row['pc_hometext'])."\r\n".$etitle;
+            }
+            echo "<a href='javascript:oldEvt(" . htmlspecialchars($row['pc_eid'],ENT_QUOTES) . ")' title='" . htmlspecialchars($etitle,ENT_QUOTES) . "'>";
+            echo "<b>" . htmlspecialchars(xl($dayname) . ", " . $row['pc_eventDate'],ENT_NOQUOTES) . "</b>" . xlt("Status") .  "(";
+            echo " " .  generate_display_field(array('data_type'=>'1','list_id'=>'apptstat'),$row['pc_apptstatus']) . ")<br>";   // can't use special char parser on this
+            echo htmlspecialchars("$disphour:$dispmin ") . xl($dispampm) . " ";
+            echo htmlspecialchars($row['fname'] . " " . $row['lname'],ENT_NOQUOTES) . "</a><br>\n";
+        }
+        if (isset($pres) && $res != null) {
+           if ( $count < 1 ) { 
+               echo "&nbsp;&nbsp;" . htmlspecialchars(xl('None'),ENT_NOQUOTES);          
+           }
+        echo "</div>";
+        }
+    }
+// END of past appointments            
+            
 			?>
 		</div>
 
@@ -1248,6 +1502,42 @@ expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel,
         </div>
     </td>
     </tr>
+    
+           <?php // TRACK ANYTHING -----
+		
+		// Determine if track_anything form is in use for this site.
+		$tmp = sqlQuery("SELECT count(*) AS count FROM registry WHERE " .
+						"directory = 'track_anything' AND state = 1");
+		$track_is_registered = $tmp['count'];
+		if($track_is_registered){
+			echo "<tr> <td>";
+			// track_anything expand collapse widget
+			$widgetTitle = xl("Tracks");
+			$widgetLabel = "track_anything";
+			$widgetButtonLabel = xl("Tracks");
+			$widgetButtonLink = "../../forms/track_anything/create.php";
+			$widgetButtonClass = "";
+			$widgetAuth = "";  // don't show the button
+			$linkMethod = "html";
+			$bodyClass = "notab";
+			// check to see if any tracks exist
+			$spruch = "SELECT id " .
+				"FROM forms " . 
+				"WHERE pid = ? " .
+				"AND formdir = ? "; 
+			$existTracks = sqlQuery($spruch, array($pid, "track_anything") );	
+
+			$fixedWidth = false;
+			expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel,
+				$widgetButtonLink, $widgetButtonClass, $linkMethod, $bodyClass,
+				$widgetAuth, $fixedWidth);
+?>
+      <br/>
+      <div style='margin-left:10px' class='text'><img src='../../pic/ajax-loader.gif'/></div><br/>
+      </div>
+     </td>
+    </tr>
+<?php  }  // end track_anything ?>
     </table>
 
 	</div> <!-- end right column div -->
@@ -1264,6 +1554,13 @@ expand_collapse_widget($widgetTitle, $widgetLabel, $widgetButtonLabel,
  Calendar.setup({inputField:"form_userdate1", ifFormat:"%Y-%m-%d", button:"img_userdate1"});
 </script>
 <?php } ?>
+<script language='JavaScript'>
+// Array of skip conditions for the checkSkipConditions() function.
+var skipArray = [
+<?php echo $condition_str; ?>
+];
+checkSkipConditions();
+</script>
 
 </body>
 </html>

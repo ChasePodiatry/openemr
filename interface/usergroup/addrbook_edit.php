@@ -72,6 +72,12 @@ td { font-size:10pt; }
 
  // Process to customize the form by type
  function typeSelect(a) {
+   if(a=='ord_lab'){
+      $('#cpoe_span').css('display','inline');
+  } else {
+       $('#cpoe_span').css('display','none');
+       $('#form_cpoe').removeAttr('checked');
+  }
   if (type_options_js[a] == 3) {
    // Company centric:
    //   1) Hide the person Name entries
@@ -137,7 +143,9 @@ td { font-size:10pt; }
     "upin = "         . invalue('form_upin')         . ", " .
     "npi = "          . invalue('form_npi')          . ", " .
     "taxonomy = "     . invalue('form_taxonomy')     . ", " .
+	"cpoe = "         . invalue('form_cpoe')         . ", " .    
     "email = "        . invalue('form_email')        . ", " .
+    "email_direct = " . invalue('form_email_direct') . ", " .
     "url = "          . invalue('form_url')          . ", " .
     "street = "       . invalue('form_street')       . ", " .
     "streetb = "      . invalue('form_streetb')      . ", " .
@@ -163,8 +171,8 @@ td { font-size:10pt; }
    $userid = sqlInsert("INSERT INTO users ( " .
     "username, password, authorized, info, source, " .
     "title, fname, lname, mname,  " .
-    "federaltaxid, federaldrugid, upin, facility, see_auth, active, npi, taxonomy, " .
-    "specialty, organization, valedictory, assistant, billname, email, url, " .
+    "federaltaxid, federaldrugid, upin, facility, see_auth, active, npi, taxonomy, cpoe, " .
+    "specialty, organization, valedictory, assistant, billname, email, email_direct, url, " .
     "street, streetb, city, state, zip, " .
     "street2, streetb2, city2, state2, zip2, " .
     "phone, phonew1, phonew2, phonecell, fax, notes, abook_type "            .
@@ -186,12 +194,14 @@ td { font-size:10pt; }
     "1, "                                . // active
     invalue('form_npi')           . ", " .
     invalue('form_taxonomy')      . ", " .
+	invalue('form_cpoe')          . ", " .
     invalue('form_specialty')     . ", " .
     invalue('form_organization')  . ", " .
     invalue('form_valedictory')   . ", " .
     invalue('form_assistant')     . ", " .
     "'', "                               . // billname
     invalue('form_email')         . ", " .
+    invalue('form_email_direct')  . ", " .
     invalue('form_url')           . ", " .
     invalue('form_street')        . ", " .
     invalue('form_streetb')       . ", " .
@@ -249,6 +259,9 @@ td { font-size:10pt; }
  $(document).ready(function() {
   // customize the form via the type options
   typeSelect("<?php echo attr($row['abook_type']); ?>");
+  if(abook_type == 'ord_lab') {
+    $('#cpoe_span').css('display','inline');
+   }
  });
 </script>
 
@@ -298,6 +311,10 @@ td { font-size:10pt; }
    <input type='text' size='40' name='form_organization' maxlength='250'
     value='<?php echo attr($row['organization']); ?>'
     style='width:100%' class='inputtext' />
+	<span id='cpoe_span' style="display:none;">
+		<input type='checkbox' title="<?php echo xla('CPOE'); ?>" name='form_cpoe' id='form_cpoe' value='1' <?php if($row['cpoe']=='1') echo "CHECKED"; ?>/>
+		<label for='form_cpoe'><b><?php echo xlt('CPOE'); ?></b></label>
+   </span>
   </td>
  </tr>
 
@@ -361,6 +378,15 @@ td { font-size:10pt; }
   <td>
    <input type='text' size='40' name='form_email' maxlength='250'
     value='<?php echo attr($row['email']); ?>'
+    style='width:100%' class='inputtext' />
+  </td>
+ </tr>
+
+ <tr>
+  <td nowrap><b><?php echo xlt('Trusted Email'); ?>:</b></td>
+  <td>
+   <input type='text' size='40' name='form_email_direct' maxlength='250'
+    value='<?php echo attr($row['email_direct']); ?>'
     style='width:100%' class='inputtext' />
   </td>
  </tr>

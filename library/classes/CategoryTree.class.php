@@ -13,9 +13,9 @@ class CategoryTree extends Tree {
 	/*
 	*	This just sits on top of the parent constructor, only a shell so that the _table var gets set
 	*/
-	function CategoryTree($root,$root_type = ROOT_TYPE_ID) {
+	function __construct($root,$root_type = ROOT_TYPE_ID) {
 		$this->_table = "categories";
-		parent::Tree($root,$root_type);
+		parent::__construct($root,$root_type);
 	}
 	
 	function _get_categories_array($patient_id) {
@@ -26,7 +26,14 @@ class CategoryTree extends Tree {
 			. " AND c2d.document_id = d.id";
 
 		if (is_numeric($patient_id)) {
-			$sql .= " AND d.foreign_id = '" . $patient_id . "'";
+                        if ($patient_id == "00") {
+                              // Collect documents that are not assigned to a patient
+                              $sql .= " AND (d.foreign_id = 0 OR d.foreign_id IS NULL) ";
+                        }
+                        else {
+                              // Collect documents for a specific patient
+			      $sql .= " AND d.foreign_id = '" . $patient_id . "'";
+                        }
 		}
 		$sql .= " ORDER BY c.id ASC, d.docdate DESC, d.url ASC";
 

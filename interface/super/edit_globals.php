@@ -7,11 +7,13 @@
 // of the License, or (at your option) any later version.
 
 require_once("../globals.php");
+require_once("../../custom/code_types.inc.php");
 require_once("$srcdir/acl.inc");
 require_once("$srcdir/formdata.inc.php");
 require_once("$srcdir/globals.inc.php");
 require_once("$srcdir/user.inc");
 require_once("$srcdir/classes/CouchDB.class.php");
+require_once(dirname(__FILE__)."/../../myportal/soap_service/portal_connectivity.php");
 
 if ($_GET['mode'] != "user") {
   // Check authorization.
@@ -46,6 +48,44 @@ function checkCreateCDB(){
     }
   }
   return true;
+}
+
+/**
+ * Update background_services table for a specific service following globals save.
+ * @author EMR Direct
+ */
+function updateBackgroundService($name,$active,$interval) {
+   //order important here: next_run change dependent on _old_ value of execute_interval so it comes first
+   $sql = 'UPDATE background_services SET active=?, '
+	. 'next_run = next_run + INTERVAL (? - execute_interval) MINUTE, execute_interval=? WHERE name=?';
+   return sqlStatement($sql,array($active,$interval,$interval,$name));
+}
+
+/**
+ * Make any necessary changes to background_services table when globals are saved.
+ * To prevent an unexpected service call during startup or shutdown, follow these rules:
+ * 1. Any "startup" operations should occur _before_ the updateBackgroundService() call.
+ * 2. Any "shutdown" operations should occur _after_ the updateBackgroundService() call. If these operations
+ * would cause errors in a running service call, it would be best to make the shutdown function itself
+ * a background service that is activated here, does nothing if active=1 or running=1 for the
+ * parent service, then deactivates itself by setting active=0 when it is done shutting the parent service
+ * down. This will prevent nonresponsiveness to the user by waiting for a service to finish.
+ * 3. If any "previous" values for globals are required for startup/shutdown logic, they need to be
+ * copied to a temp variable before the while($globalsrow...) loop.
+ * @author EMR Direct
+ */
+function checkBackgroundServices(){
+  //load up any necessary globals
+  $bgservices = sqlStatement("SELECT gl_name, gl_index, gl_value FROM globals WHERE gl_name IN
+  ('phimail_enable','phimail_interval')");
+    while($globalsrow = sqlFetchArray($bgservices)){
+      $GLOBALS[$globalsrow['gl_name']] = $globalsrow['gl_value'];
+    }
+
+   //Set up phimail service
+   $phimail_active = $GLOBALS['phimail_enable'] ? '1' : '0';
+   $phimail_interval = max(0,(int)$GLOBALS['phimail_interval']);
+   updateBackgroundService('phimail',$phimail_active,$phimail_interval);
 }
 ?>
 
@@ -88,9 +128,64 @@ if ($_POST['form_save'] && $_GET['mode'] == "user") {
   echo "</script>";
 }
 
+if ($_POST['form_download']) {  
+  $client = portal_connection();  
+  try {
+    $response = $client->getPortalConnectionFiles($credentials);
+  }
+  catch(SoapFault $e){
+    error_log('SoapFault Error');
+    error_log(var_dump(get_object_vars($e)));
+  }
+  catch(Exception $e){
+    error_log('Exception Error');
+    error_log(var_dump(get_object_vars($e)));
+  }
+  if($response['status'] == "1") {//WEBSERVICE RETURNED VALUE SUCCESSFULLY    
+    $tmpfilename	= realpath(sys_get_temp_dir())."/".date('YmdHis').".zip";  
+    $fp			= fopen($tmpfilename,"wb");
+    fwrite($fp,base64_decode($response['value']));
+    fclose($fp);
+    $practice_filename	= $response['file_name'];//practicename.zip    
+    ob_clean();    
+    // Set headers
+    header("Cache-Control: public");
+    header("Content-Description: File Transfer");
+    header("Content-Disposition: attachment; filename=".$practice_filename);
+    header("Content-Type: application/zip");
+    header("Content-Transfer-Encoding: binary");   
+    // Read the file from disk
+    readfile($tmpfilename);   
+    unlink($tmpfilename);    
+    exit;
+  }
+  else{//WEBSERVICE CALL FAILED AND RETURNED AN ERROR MESSAGE
+    ob_end_clean();
+    ?>
+    <script type="text/javascript">
+      alert('<?php echo xlt('Offsite Portal web Service Failed').":\\n".text($response['value']);?>');
+    </script>
+    <?php    
+  }
+}
+?>
+<html>
+<head>
+<?php
+
 // If we are saving main globals.
 //
 if ($_POST['form_save'] && $_GET['mode'] != "user") {
+  $force_off_enable_auditlog_encryption = true;
+  // Need to force enable_auditlog_encryption off if the php mycrypt module
+  // is not installed.
+  if (extension_loaded('mcrypt')) {
+    $force_off_enable_auditlog_encryption = false;
+  }
+
+  // Aug 22, 2014: Ensoftek: For Auditable events and tamper-resistance (MU2)
+  // Check the current status of Audit Logging
+  $auditLogStatusFieldOld = $GLOBALS['enable_auditlog'];
 
   $i = 0;
   foreach ($GLOBALS_METADATA as $grpname => $grparr) {
@@ -102,7 +197,7 @@ if ($_POST['form_save'] && $_GET['mode'] != "user") {
 	  }
       sqlStatement("DELETE FROM globals WHERE gl_name = '$fldid'");
 
-      if (substr($fldtype, 0, 2) == 'm_') {
+      if (!is_array($fldtype) && substr($fldtype, 0, 2) == 'm_') {
         if (isset($_POST["form_$i"])) {
           $fldindex = 0;
           foreach ($_POST["form_$i"] as $fldvalue) {
@@ -120,18 +215,33 @@ if ($_POST['form_save'] && $_GET['mode'] != "user") {
         else {
           $fldvalue = "";
         }
-        if($fldtype=='pwd')
-          $fldvalue = $fldvalue ? SHA1($fldvalue) : $fldvalueold;
-		  if(fldvalue){
-		  sqlStatement("INSERT INTO globals ( gl_name, gl_index, gl_value ) " .
-          "VALUES ( '$fldid', '0', '$fldvalue' )");
-		  }
+        if($fldtype=='pwd') $fldvalue = $fldvalue ? SHA1($fldvalue) : $fldvalueold;
+        if(fldvalue){
+          // Need to force enable_auditlog_encryption off if the php mycrypt module
+          // is not installed.
+          if ( $force_off_enable_auditlog_encryption && ($fldid  == "enable_auditlog_encryption") ) {
+            error_log("OPENEMR ERROR: UNABLE to support auditlog encryption since the php mycrypt module is not installed",0);
+            $fldvalue=0;
+          }
+          sqlStatement("INSERT INTO globals ( gl_name, gl_index, gl_value ) " .
+            "VALUES ( '$fldid', '0', '$fldvalue' )");
+        }
       }
 
       ++$i;
     }
   }
   checkCreateCDB();
+  checkBackgroundServices();
+
+  // July 1, 2014: Ensoftek: For Auditable events and tamper-resistance (MU2)
+  // If Audit Logging status has changed, log it.
+  $auditLogStatusNew = sqlQuery("SELECT gl_value FROM globals WHERE gl_name = 'enable_auditlog'");
+  $auditLogStatusFieldNew = $auditLogStatusNew['gl_value'];
+  if ( $auditLogStatusFieldOld != $auditLogStatusFieldNew )
+  {
+	 auditSQLAuditTamper($auditLogStatusFieldNew);
+  }
   echo "<script type='text/javascript'>";
   echo "parent.left_nav.location.reload();";
   echo "parent.Title.location.reload();";
@@ -165,7 +275,31 @@ tr.detail { font-size:10pt; }
 td        { font-size:10pt; }
 input     { font-size:10pt; }
 </style>
-
+<script type="text/javascript">
+  function validate_file(){
+    $.ajax({
+      type: "POST",
+      url: "<?php echo $GLOBALS['webroot']?>/library/ajax/offsite_portal_ajax.php",
+      data: {
+	action: 'check_file',      
+      },
+      cache: false,
+      success: function( message )
+      {	
+	if(message == 'OK'){
+	  document.getElementById('form_download').value = 1;
+	  document.getElementById('file_error_message').innerHTML = '';
+	  document.forms[0].submit();
+	}
+	else{
+	  document.getElementById('form_download').value = 0;
+	  document.getElementById('file_error_message').innerHTML = message;
+	  return false;	  
+	}
+      }
+    });
+  }
+</script>
 </head>
 
 <body class="body_top">
@@ -318,6 +452,19 @@ foreach ($GLOBALS_METADATA as $grpname => $grparr) {
       echo "  </select>\n";
     }
 
+    else if ($fldtype == 'all_code_types') {
+      global $code_types;
+      echo "  <select name='form_$i' id='form_$i'>\n";
+      foreach (array_keys($code_types) as $code_key ) {
+        echo "   <option value='" . attr($code_key) . "'";
+        if ($code_key == $fldvalue) echo " selected";
+        echo ">";
+        echo xlt($code_types[$code_key]['label']);
+        echo "</option>\n";
+      }
+      echo "  </select>\n";
+    }
+
     else if ($fldtype == 'm_lang') {
       $res = sqlStatement("SELECT * FROM lang_languages  ORDER BY lang_description");
       echo "  <select multiple name='form_{$i}[]' id='form_{$i}[]' size='3'>\n";
@@ -348,7 +495,10 @@ foreach ($GLOBALS_METADATA as $grpname => $grparr) {
           // Only show files that contain style_ as options
           //  Skip style_blue.css since this is used for
           //  lone scripts such as setup.php
-          if (!preg_match("/^style_.*\.css$/", $tfname) || $tfname == 'style_blue.css') { continue; }
+          //  Also skip style_pdf.css which is for PDFs and not screen output
+          if (!preg_match("/^style_.*\.css$/", $tfname) ||
+            $tfname == 'style_blue.css' || $tfname == 'style_pdf.css')
+            continue;
           echo "<option value='$tfname'";
           if ($tfname == $fldvalue) echo " selected";
           echo ">";
@@ -390,8 +540,12 @@ foreach ($GLOBALS_METADATA as $grpname => $grparr) {
     }
     ++$i;
    }
-  }
-  echo " </table>\n";
+    if(trim(strtolower($fldid)) == 'portal_offsite_address_patient_link' && $GLOBALS['portal_offsite_enable'] && $GLOBALS['portal_offsite_providerid']){
+      echo "<input type='hidden' name='form_download' id='form_download'>";
+      echo "<tr><td><input onclick=\"return validate_file()\" type='button' value='".xla('Download Offsite Portal Connection Files')."' /></td><td id='file_error_message' style='color:red'></td></tr>";
+    }
+  }  
+  echo " </table>\n";  
   echo " </div>\n";
  }
 }
@@ -399,7 +553,7 @@ foreach ($GLOBALS_METADATA as $grpname => $grparr) {
 </div>
 
 <p>
- <input type='submit' name='form_save' value='<?php xl('Save','e'); ?>' />
+ <input type='submit' name='form_save' value='<?php echo xla('Save'); ?>' />
 </p>
 </center>
 

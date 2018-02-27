@@ -1,16 +1,16 @@
 <?php
 /* vim: set expandtab sw=4 ts=4 sts=4: */
 /**
+ * phpinfo() wrapper to allow displaying only when configured to do so.
  *
- * @version $Id$
+ * @package PhpMyAdmin
  */
 
 /**
  * Gets core libraries and defines some variables
  */
-define('PMA_MINIMUM_COMMON', true);
-require_once './libraries/common.inc.php';
-
+require_once 'libraries/common.inc.php';
+PMA_Response::getInstance()->disable();
 
 /**
  * Displays PHP information
@@ -18,4 +18,3 @@ require_once './libraries/common.inc.php';
 if ($GLOBALS['cfg']['ShowPhpInfo']) {
     phpinfo();
 }
-?>

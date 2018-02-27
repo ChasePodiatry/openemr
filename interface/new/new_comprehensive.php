@@ -13,8 +13,7 @@ require_once("$srcdir/patient.inc");
 require_once("$srcdir/erx_javascript.inc.php");
 
 // Check authorization.
-$thisauth = acl_check('patients', 'demo');
-if ($thisauth != 'write' && $thisauth != 'addonly')
+if (!acl_check('patients','demo','',array('write','addonly') ))
   die("Adding demographics is not authorized.");
 
 $CPR = 4; // cells per row
@@ -92,7 +91,11 @@ div.section {
 <script type="text/javascript" src="../../library/dynarch_calendar.js"></script>
 <?php include_once("{$GLOBALS['srcdir']}/dynarch_calendar_en.inc.php"); ?>
 <script type="text/javascript" src="../../library/dynarch_calendar_setup.js"></script>
-<script type="text/javascript" src="<?php echo $GLOBALS['webroot']; ?>/library/js/jquery.js"></script>
+<script type="text/javascript" src="../../library/js/jquery.1.3.2.js"></script>
+<script type="text/javascript" src="../../library/js/common.js"></script>
+<script type="text/javascript" src="../../library/js/fancybox/jquery.fancybox-1.2.6.js"></script>
+<?php include_once("{$GLOBALS['srcdir']}/options.js.php"); ?>
+<link rel="stylesheet" type="text/css" href="../../library/js/fancybox/jquery.fancybox-1.2.6.css" media="screen" />
 
 <SCRIPT LANGUAGE="JavaScript"><!--
 //Visolve - sync the radio buttons - Start
@@ -181,7 +184,6 @@ var insurance_index = 0;
 // The OnClick handler for searching/adding the insurance company.
 function ins_search(ins) {
  insurance_index = ins;
- dlgopen('../../interface/practice/ins_search.php', '_blank', 550, 400);
  return false;
 }
 
@@ -213,20 +215,22 @@ function capitalizeMe(elem) {
 // Onkeyup handler for policy number.  Allows only A-Z and 0-9.
 function policykeyup(e) {
  var v = e.value.toUpperCase();
+ var filteredString="";
  for (var i = 0; i < v.length; ++i) {
   var c = v.charAt(i);
-  if (c >= '0' && c <= '9') continue;
-  if (c >= 'A' && c <= 'Z') continue;
-  if (c == '*') continue;
-  if (c == '-') continue;
-  if (c == '_') continue;
-  if (c == '(') continue;
-  if (c == ')') continue;
-  if (c == '#') continue;
-  v = v.substring(0, i) + v.substring(i + i);
-  --i;
+  if ((c >= '0' && c <= '9') ||
+     (c >= 'A' && c <= 'Z') ||
+     (c == '*') ||
+     (c == '-') ||     
+     (c == '_') ||
+     (c == '(') ||
+     (c == ')') ||
+     (c == '#'))
+     {
+         filteredString+=c;
+     }
  }
- e.value = v;
+ e.value = filteredString;
  return;
 }
 
@@ -251,7 +255,8 @@ function trimlen(s) {
 }
 
 function validate(f) {
-<?php generate_layout_validation('DEM'); ?>
+  var errMsgs = new Array();
+  <?php generate_layout_validation('DEM'); ?>
   <?php if($GLOBALS['erx_enable']){ ?>
   alertMsg='';
   for(i=0;i<f.length;i++){
@@ -279,6 +284,17 @@ function validate(f) {
     return false;
   }
   <?php } ?>
+  var msg = "";
+  msg += "<?php echo htmlspecialchars(xl('The following fields are required'),ENT_QUOTES); ?>:\n\n";
+  for ( var i = 0; i < errMsgs.length; i++ ) {
+         msg += errMsgs[i] + "\n";
+  }
+  msg += "\n<?php echo htmlspecialchars(xl('Please fill them in before continuing.'),ENT_QUOTES); ?>";
+ 
+  if ( errMsgs.length > 0 ) {
+         alert(msg);
+         return false;
+  }
  return true;
 }
 
@@ -410,6 +426,7 @@ while ($frow = sqlFetchArray($fres)) {
   $field_id   = $frow['field_id'];
   $list_id    = $frow['list_id'];
   $currvalue  = '';
+  $condition_str = get_conditions_str($condition_str,$group_fields);
 
   if (strpos($field_id, 'em_') === 0) {
     $tmp = substr($field_id, 3);
@@ -450,11 +467,11 @@ while ($frow = sqlFetchArray($fres)) {
   }
 
   if ($item_count == 0 && $titlecols == 0) $titlecols = 1;
-
+  $field_id_label='label_'.$frow['field_id'];
   // Handle starting of a new label cell.
   if ($titlecols > 0) {
     end_cell();
-    echo "<td colspan='$titlecols'";
+    echo "<td colspan='$titlecols' id='$field_id_label'";
     echo ($frow['uor'] == 2) ? " class='required'" : " class='bold'";
     if ($cell_count == 2) echo " style='padding-left:10pt'";
     echo ">";
@@ -464,7 +481,7 @@ while ($frow = sqlFetchArray($fres)) {
 
   echo "<b>";
     
-  // Modified 6-09 by BM - Translate if applicable  
+  // Modified 6-09 by BM - Translate if applicable
   if ($frow['title']) echo (xl_layout_label($frow['title']).":"); else echo "&nbsp;";
     
   echo "</b>";
@@ -518,8 +535,8 @@ if (! $GLOBALS['simplified_demographics']) {
   echo ">" . $iname . "</option>\n";
  }
 ?>
-   </select>&nbsp;<a href='' onclick='return ins_search(<?php echo $i?>)'>
-   <?php xl('Search/Add Insurer','e'); ?></a>
+   </select>&nbsp;<a class='iframe medium_modal' href='../practice/ins_search.php' onclick='ins_search(<?php echo $i?>)'>
+  <span> <?php xl('Search/Add Insurer','e'); ?></span></a>
   </td>
  </tr>
  <tr>
@@ -745,7 +762,13 @@ if (f.form_phone_cell   ) phonekeyup(f.form_phone_cell   ,mypcc);
 // var override = false; // flag that overrides the duplication warning
 
 $(document).ready(function() {
-
+enable_modals();
+ $(".medium_modal").fancybox( {
+                'overlayOpacity' : 0.0,
+                'showCloseButton' : true,
+                'frameHeight' : 460,
+                'frameWidth' : 650
+        });
     // added to integrate insurance stuff
     <?php for ($i=1;$i<=3;$i++) { ?>
     $("#form_i<?php echo $i?>subscriber_relationship").change(function() { auto_populate_employer_address<?php echo $i?>(); });
@@ -816,6 +839,19 @@ while ($lrow = sqlFetchArray($lres)) {
 
 }); // end document.ready
 
+</script>
+<script language='JavaScript'>
+    // Array of skip conditions for the checkSkipConditions() function.
+    var skipArray = [
+        <?php echo $condition_str; ?>
+    ];
+    checkSkipConditions();
+    $("input").change(function() {
+        checkSkipConditions();
+    });
+    $("select").change(function() {
+        checkSkipConditions();
+    });
 </script>
 
 </html>

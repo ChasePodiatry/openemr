@@ -9,8 +9,8 @@ class C_FormVitals extends Controller {
 
 	var $template_dir;
 
-    function C_FormVitals($template_mod = "general") {
-    	parent::Controller();
+    function __construct($template_mod = "general") {
+    	parent::__construct();
     	$returnurl = $GLOBALS['concurrent_layout'] ? 'encounter_top.php' : 'patient_encounter.php';
     	$this->template_mod = $template_mod;
     	$this->template_dir = dirname(__FILE__) . "/templates/vitals/";
@@ -18,8 +18,9 @@ class C_FormVitals extends Controller {
     	$this->assign("DONT_SAVE_LINK",$GLOBALS['webroot'] . "/interface/patient_file/encounter/$returnurl");
     	$this->assign("STYLE", $GLOBALS['style']);
 
-        // send the unit selection
-        $this->assign("units_of_measurement",$GLOBALS['units_of_measurement']);
+      // Options for units of measurement and things to omit.
+      $this->assign("units_of_measurement",$GLOBALS['units_of_measurement']);
+      $this->assign("gbl_vitals_options",$GLOBALS['gbl_vitals_options']);
     }
 
     function default_action_old() {
@@ -52,8 +53,10 @@ class C_FormVitals extends Controller {
 
         // get the patient's current age
     	$patient_data = getPatientData($GLOBALS['pid']);
-        $patient_age = getPatientAge($patient_data['DOB']);
+        $patient_dob=$patient_data['DOB'];
+        $patient_age = getPatientAge($patient_dob);
     	$this->assign("patient_age", $patient_age);
+        $this->assign("patient_dob",$patient_dob);
 
     	$i = 1;
     	while($result && !$result->EOF)

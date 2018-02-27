@@ -21,6 +21,7 @@
 * @package   OpenEMR
 * @author    Rod Roark <rod@sunsetsystems.com>
 * @author    Brady Miller <brady@sparmy.com>
+* @author  Teny <teny@zhservices.com>
 * @link      http://www.open-emr.org
 */
 
@@ -142,6 +143,104 @@ function tableHasIndex($tblname, $colname) {
   $row = sqlQuery("SHOW INDEX FROM `$tblname` WHERE `Key_name` = '$colname'");
   return (empty($row)) ? false : true;
 }
+/**
+* Check if a list exists.
+*
+* @param  string  $option_id  Sql List Option ID
+* @return boolean           returns true if the list exists
+*/
+function listExists($option_id) {
+  $row = sqlQuery("SELECT * FROM list_options WHERE list_id = 'lists' AND option_id = ?", array($option_id));
+  if (empty($row)) return false;
+  return true;  
+}
+/**
+* Function to migrate the Clickoptions settings (if exist) from the codebase into the database.
+*  Note this function is only run once in the sql upgrade script (from 4.1.1 to 4.1.2) if the
+*  issue_types sql table does not exist.
+*/
+function clickOptionsMigrate() {
+  // If the clickoptions.txt file exist, then import it.
+  if (file_exists(dirname(__FILE__)."/../sites/".$_SESSION['site_id']."/clickoptions.txt")) {
+    $file_handle = fopen(dirname(__FILE__)."/../sites/".$_SESSION['site_id']."/clickoptions.txt", "rb");
+    $seq  = 10;
+    $prev = '';
+    echo "Importing clickoption setting<br>";
+    while (!feof($file_handle) ) {
+      $line_of_text = fgets($file_handle);
+      if (preg_match('/^#/', $line_of_text)) continue;
+      if ($line_of_text == "") continue;
+      $parts = explode('::', $line_of_text);
+      $parts[0] = trim(str_replace("\r\n","",$parts[0]));
+      $parts[1] = trim(str_replace("\r\n","",$parts[1]));
+      if ($parts[0] != $prev) {
+        $sql1 = "INSERT INTO list_options (`list_id`,`option_id`,`title`) VALUES (?,?,?)";
+        SqlStatement($sql1, array('lists',$parts[0].'_issue_list',ucwords(str_replace("_"," ",$parts[0])).' Issue List') );
+        $seq = 10;
+      }
+      $sql2 = "INSERT INTO list_options (`list_id`,`option_id`,`title`,`seq`) VALUES (?,?,?,?)";
+      SqlStatement($sql2, array($parts[0].'_issue_list', $parts[1], $parts[1], $seq) );
+      $seq = $seq + 10;
+      $prev = $parts[0];
+    }
+    fclose($file_handle);
+  }
+}
+/**
+*  Function to create list Occupation.
+*  Note this function is only run once in the sql upgrade script  if the list Occupation does not exist
+*/
+function CreateOccupationList() {
+   $res = sqlStatement("SELECT DISTINCT occupation FROM patient_data WHERE occupation <> ''"); 
+   while($row = sqlFetchArray($res)) {
+    $records[] = $row['occupation'];  
+   }
+   sqlStatement("INSERT INTO list_options (list_id, option_id, title) VALUES('lists', 'Occupation', 'Occupation')");
+   if(count($records)>0) {
+    $seq = 0;    
+    foreach ($records as $key => $value) {
+     sqlStatement("INSERT INTO list_options ( list_id, option_id, title, seq) VALUES ('Occupation', ?, ?, ?)", array($value, $value, ($seq+10)));
+     $seq = $seq + 10;     
+    }   
+   }
+}
+/**
+*  Function to create list reaction.
+*  Note this function is only run once in the sql upgrade script  if the list reaction does not exist
+*/
+function CreateReactionList() {
+   $res = sqlStatement("SELECT DISTINCT reaction FROM lists WHERE reaction <> ''"); 
+   while($row = sqlFetchArray($res)) {
+    $records[] = $row['reaction'];  
+   }
+   sqlStatement("INSERT INTO list_options (list_id, option_id, title) VALUES('lists', 'reaction', 'Reaction')");
+   if(count($records)>0) {
+    $seq = 0;    
+    foreach ($records as $key => $value) {
+     sqlStatement("INSERT INTO list_options ( list_id, option_id, title, seq) VALUES ('reaction', ?, ?, ?)", array($value, $value, ($seq+10)));
+     $seq = $seq + 10;
+    }   
+   }
+}
+
+/*
+* Function to add existing values in the immunization table to the new immunization manufacturer list
+* This function will be executed always, but only missing values will ne inserted to the list
+*/
+function CreateImmunizationManufacturerList() {
+  $res = sqlStatement("SELECT DISTINCT manufacturer FROM immunizations WHERE manufacturer <> ''");
+  while($row = sqlFetchArray($res)) {
+    $records[] = $row['manufacturer'];  
+  }
+  sqlStatement("INSERT INTO list_options (list_id, option_id, title) VALUES ('lists','Immunization_Manufacturer','Immunization Manufacturer')");    
+  if(count($records)>0) {
+    $seq = 0;
+    foreach ($records as $key => $value) {      
+      sqlStatement("INSERT INTO list_options ( list_id, option_id, title, seq) VALUES ('Immunization_Manufacturer', ?, ?, ?)", array($value, $value, ($seq+10)));
+      $seq = $seq + 10;
+    }   
+  }
+}
 
 /**
 * Upgrade or patch the database with a selected upgrade/patch file.
@@ -155,6 +254,10 @@ function tableHasIndex($tblname, $colname) {
 * #IfTable
 *   argument: table_name
 *   behavior: if the table_name does exist, the block will be executed
+*
+* #IfColumn
+*   arguments: table_name colname
+*   behavior:  if the table and column exist,  the block will be executed
 *
 * #IfMissingColumn
 *   arguments: table_name colname
@@ -190,6 +293,10 @@ function tableHasIndex($tblname, $colname) {
 * #IfRow2D
 *   arguments: table_name colname value colname2 value2
 *   behavior:  If the table table_name does have a row where colname = value AND colname2 = value2, the block will be executed.
+*   
+* #IfRow3D
+*   arguments: table_name colname value colname2 value2 colname3 value3
+*   behavior:  If the table table_name does have a row where colname = value AND colname2 = value2 AND colname3 = value3, the block will be executed.   
 *
 * #IfIndex
 *   desc:      This function is most often used for dropping of indexes/keys.
@@ -201,6 +308,15 @@ function tableHasIndex($tblname, $colname) {
 *   arguments: table_name colname
 *   behavior:  If the index does not exist, it will be created
 *
+* #IfNotMigrateClickOptions
+*   Custom function for the importing of the Clickoptions settings (if exist) from the codebase into the database
+*
+* #IfNotListOccupation
+* Custom function for creating Occupation List
+* 
+* #IfNotListReaction
+* Custom function for creating Reaction List
+* 
 * #EndIf
 *   all blocks are terminated with a #EndIf statement.
 *
@@ -218,7 +334,7 @@ function upgradeFromSqlFile($filename) {
   if ($fd == FALSE) {
     echo "ERROR.  Could not open '$fullname'.\n";
     flush();
-    break;
+    return;
   }
 
   $query = "";
@@ -238,6 +354,16 @@ function upgradeFromSqlFile($filename) {
     }
     else if (preg_match('/^#IfTable\s+(\S+)/', $line, $matches)) {
       $skipping = ! tableExists($matches[1]);
+      if ($skipping) echo "<font color='green'>Skipping section $line</font><br />\n";
+    }
+    else if (preg_match('/^#IfColumn\s+(\S+)\s+(\S+)/', $line, $matches)) {
+      if (tableExists($matches[1])) {
+        $skipping = !columnExists($matches[1], $matches[2]);
+      }
+      else {
+        // If no such table then the column is deemed "missing".
+        $skipping = true;
+      }
       if ($skipping) echo "<font color='green'>Skipping section $line</font><br />\n";
     }
     else if (preg_match('/^#IfMissingColumn\s+(\S+)\s+(\S+)/', $line, $matches)) {
@@ -349,6 +475,63 @@ function upgradeFromSqlFile($filename) {
       }
       if ($skipping) echo "<font color='green'>Skipping section $line</font><br />\n";
     }
+    else if (preg_match('/^#IfRow3D\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)/', $line, $matches)) {
+    	if (tableExists($matches[1])) {
+    		$skipping = !(tableHasRow3D($matches[1], $matches[2], $matches[3], $matches[4], $matches[5], $matches[6], $matches[7]));
+    	}
+    	else {
+    		// If no such table then should skip.
+    		$skipping = true;
+    	}
+    	if ($skipping) echo "<font color='green'>Skipping section $line</font><br />\n";
+    }
+    else if (preg_match('/^#IfNotMigrateClickOptions/', $line)) {
+      if (tableExists("issue_types")) {
+        $skipping = true;
+      }
+      else {
+        // Create issue_types table and import the Issue Types and clickoptions settings from codebase into the database
+        clickOptionsMigrate(); 
+        $skipping = false;
+      }
+      if ($skipping) echo "<font color='green'>Skipping section $line</font><br />\n";
+    }
+    else if (preg_match('/^#IfNotListOccupation/', $line)) {
+      if ( (listExists("Occupation")) || (!columnExists('patient_data','occupation')) ) {
+        $skipping = true;
+      }
+      else {
+        // Create Occupation list
+        CreateOccupationList(); 
+        $skipping = false;
+        echo "<font color='green'>Built Occupation List</font><br />\n";
+      }
+      if ($skipping) echo "<font color='green'>Skipping section $line</font><br />\n";
+    }
+    else if (preg_match('/^#IfNotListReaction/', $line)) {
+      if ( (listExists("reaction")) || (!columnExists('lists','reaction')) ) {
+        $skipping = true;
+      }
+      else {
+        // Create Reaction list
+        CreateReactionList(); 
+        $skipping = false;
+        echo "<font color='green'>Built Reaction List</font><br />\n";        
+      }
+      if ($skipping) echo "<font color='green'>Skipping section $line</font><br />\n";
+    }
+    else if (preg_match('/^#IfNotListImmunizationManufacturer/', $line)){      
+      if ( listExists("Immunization_Manufacturer") ) {
+        $skipping = true;
+      }
+      else {
+        // Create Immunization Manufacturer list
+        CreateImmunizationManufacturerList(); 
+        $skipping = false;
+        echo "<font color='green'>Built Immunization Manufacturer List</font><br />\n";        
+      }
+      if ($skipping) echo "<font color='green'>Skipping section $line</font><br />\n";
+    }
     else if (preg_match('/^#EndIf/', $line)) {
       $skipping = false;
     }
@@ -362,7 +545,7 @@ function upgradeFromSqlFile($filename) {
       echo "$query<br />\n";
       if (!sqlStatement($query)) {
         echo "<font color='red'>The above statement failed: " .
-          mysql_error() . "<br />Upgrading will continue.<br /></font>\n";
+          getSqlLastError() . "<br />Upgrading will continue.<br /></font>\n";
       }
       $query = '';
     }

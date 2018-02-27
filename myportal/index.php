@@ -70,7 +70,7 @@ require_once("../interface/globals.php");
 ?>
 <html>
 <head>
-    <?php include_once($GLOBALS['fileroot']."/library/sha1.js");?>
+    <?php require_once($GLOBALS['fileroot'].'/library/sha1.js');?>
 <script type="text/javascript">
  function getshansubmit(){
    	randkey = "<?php echo $randkey;?>";
@@ -82,9 +82,9 @@ require_once("../interface/globals.php");
  
 </script>
 </head>
-<title><?php echo htmlspecialchars(xl("Redirection"),ENT_QUOTES);?></title>
+<title><?php echo xlt('Redirection');?></title>
 <body onload="getshansubmit()">
-    <form name="portal" method="post" action="<?php echo htmlspecialchars($GLOBALS['portal_offsite_address'],ENT_QUOTES);?>">
+    <form name="portal" method="post" action="<?php echo htmlspecialchars($GLOBALS['portal_offsite_address']."?version=".$v_offsite_portal,ENT_QUOTES);?>">
     <input type="hidden" name="user" value="<?php echo htmlspecialchars($GLOBALS['portal_offsite_username'],ENT_QUOTES);?>">
     <input type="hidden" name="emr_path" value="<?php echo htmlspecialchars($emr_path,ENT_QUOTES);?>">
     <input type="hidden" name="emr_site" value="<?php echo htmlspecialchars($_SESSION['site_id'],ENT_QUOTES);?>">

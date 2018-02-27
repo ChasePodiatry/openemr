@@ -1,4 +1,23 @@
 <?php
+/**
+ *
+ * Patient history form.
+ *
+ * LICENSE: This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 3
+ * of the License, or (at your option) any later version.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://opensource.org/licenses/gpl-license.php>;.
+ *
+ * @package OpenEMR
+ * @author  Brady Miller <brady@sparmy.com>
+ * @link    http://www.open-emr.org
+ */
 
 //SANITIZE ALL ESCAPES
 $sanitize_all_escapes=true;
@@ -13,17 +32,16 @@ require_once("$srcdir/patient.inc");
 require_once("history.inc.php");
 require_once("$srcdir/acl.inc");
 require_once("$srcdir/options.inc.php");
-
+require_once("$srcdir/options.js.php");
 $CPR = 4; // cells per row
 
 // Check authorization.
-$thisauth = acl_check('patients', 'med');
-if ($thisauth) {
+if (acl_check('patients','med')) {
   $tmp = getPatientData($pid, "squad");
   if ($tmp['squad'] && ! acl_check('squads', $tmp['squad']))
-   $thisauth = 0;
+   die(htmlspecialchars(xl("Not authorized for this squad."),ENT_NOQUOTES));
 }
-if ($thisauth != 'write' && $thisauth != 'addonly')
+if ( !acl_check('patients','med','',array('write','addonly') ))
   die(htmlspecialchars(xl("Not authorized"),ENT_NOQUOTES));
 ?>
 <html>
@@ -48,9 +66,20 @@ if ($thisauth != 'write' && $thisauth != 'addonly')
 
 <script type="text/javascript" src="../../../library/js/jquery.1.3.2.js"></script>
 <script type="text/javascript" src="../../../library/js/common.js"></script>
+<?php include_once("{$GLOBALS['srcdir']}/options.js.php"); ?>
 
 <script LANGUAGE="JavaScript">
-
+ //Added on 5-jun-2k14 (regarding 'Smoking Status - display SNOMED code description')
+ var code_options_js = Array();
+ 
+ <?php
+ $smoke_codes = getSmokeCodes();
+  
+ foreach ($smoke_codes as $val => $code) {
+            echo "code_options_js"."['" . attr($val) . "']='" . attr($code) . "';\n";
+      }
+ ?>
+     
 var mypcc = '<?php echo $GLOBALS['phone_country_code'] ?>';
 
 function divclick(cb, divid) {
@@ -87,13 +116,14 @@ function submitme() {
 }
 
 function submit_history() {
+    top.restoreSession();
     document.forms[0].submit();
 }
 
 //function for selecting the smoking status in radio button based on the selection of drop down list.
 function radioChange(rbutton)
 {
-     if (rbutton == 1 || rbutton == 2)
+    if (rbutton == 1 || rbutton == 2 || rbutton == 15 || rbutton == 16)
      {
      document.getElementById('radio_tobacco[current]').checked = true;
      }
@@ -116,6 +146,15 @@ function radioChange(rbutton)
      if(radList[i].checked) radList[i].checked = false;
      }
      }
+     //Added on 5-jun-2k14 (regarding 'Smoking Status - display SNOMED code description')
+     if(rbutton!=""){
+         if(code_options_js[rbutton]!="")
+            $("#smoke_code").html(" ( "+code_options_js[rbutton]+" )");
+         else
+             $("#smoke_code").html(""); 
+     }
+     else
+        $("#smoke_code").html(""); 
 }
 
 //function for selecting the smoking status in drop down list based on the selection in radio button.
@@ -137,12 +176,42 @@ function smoking_statusClicked(cb)
      {
      document.getElementById('form_tobacco').selectedIndex = 6;
      }
+	 radioChange(document.getElementById('form_tobacco').value);	 
 }
+
+// The ID of the input element to receive a found code.
+var current_sel_name = '';
+
+// This is for callback by the find-code popup.
+// Appends to or erases the current list of related codes.
+function set_related(codetype, code, selector, codedesc) {
+ var frc = document.forms[0][current_sel_name];
+ var s = frc.value;
+ if (code) {
+  if (s.length > 0) s += ';';
+  s += codetype + ':' + code;
+ } else {
+  s = '';
+ }
+ frc.value = s;
+}
+
+// This invokes the find-code popup.
+function sel_related(e) {
+ current_sel_name = e.name;
+ dlgopen('../encounter/find_code_popup.php<?php if ($GLOBALS['ippf_specific']) echo '?codetype=REF' ?>', '_blank', 500, 400);
+}
+
 </script>
 
 <script type="text/javascript">
 /// todo, move this to a common library
 $(document).ready(function(){
+    if($("#form_tobacco").val()!=""){
+        if(code_options_js[$("#form_tobacco").val()]!=""){
+            $("#smoke_code").html(" ( "+code_options_js[$("#form_tobacco").val()]+" )");
+        }
+    }
     tabbify();
 });
 </script>
@@ -169,14 +238,14 @@ $fres = sqlStatement("SELECT * FROM layout_options " .
   "ORDER BY group_name, seq");
 ?>
 
-<form action="history_save.php" name='history_form' method='post' onsubmit='return validate(this)'>
+<form action="history_save.php" name='history_form' method='post' onsubmit='return validate(this)' >
     <input type='hidden' name='mode' value='save'>
 
     <div>
         <span class="title"><?php echo htmlspecialchars(xl('Patient History / Lifestyle'),ENT_NOQUOTES); ?></span>
     </div>
     <div style='float:left;margin-right:10px'>
-  <?php echo htmlspecialchars(xl('for'),ENT_NOQUOTES);?>&nbsp;<span class="title"><a href="../summary/demographics.php"><?php echo htmlspecialchars(getPatientName($pid),ENT_NOQUOTES); ?></a></span>
+  <?php echo htmlspecialchars(xl('for'),ENT_NOQUOTES);?>&nbsp;<span class="title"><a href="../summary/demographics.php" onclick='top.restoreSession()'><?php echo htmlspecialchars(getPatientName($pid),ENT_NOQUOTES); ?></a></span>
     </div>
     <div>
         <a href="javascript:submit_history();" class='css_button'>
@@ -208,6 +277,20 @@ $fres = sqlStatement("SELECT * FROM layout_options " .
 
 <script language="JavaScript">
 <?php echo $date_init; // setup for popup calendars ?>
+</script>
+
+<script language='JavaScript'>
+    // Array of skip conditions for the checkSkipConditions() function.
+    var skipArray = [
+        <?php echo $condition_str; ?>
+    ];
+    checkSkipConditions();
+    $("input").change(function() {
+        checkSkipConditions();
+    });
+    $("select").change(function() {
+        checkSkipConditions();
+    });
 </script>
 
 </html>

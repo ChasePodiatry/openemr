@@ -32,9 +32,8 @@ function xl($constant,$mode='r',$prepend='',$append='') {
     // second, attempt translation
     $sql="SELECT * FROM lang_definitions JOIN lang_constants ON " .
       "lang_definitions.cons_id = lang_constants.cons_id WHERE " .
-      "lang_id='$lang_id' AND constant_name = '" .
-      add_escape_custom($constant) . "' LIMIT 1";
-    $res = sqlStatementNoLog($sql);
+      "lang_id=? AND constant_name = ? LIMIT 1";
+    $res = sqlStatementNoLog($sql,array($lang_id,$constant));
     $row = SqlFetchArray($res);
     $string = $row['definition'];
     if ($string == '') { $string = "$constant"; }
@@ -223,10 +222,28 @@ function getLanguageTitle($val) {
  }
  
  // get language title
- $res = sqlStatement("select lang_description from lang_languages where lang_id = '".$lang_id."'");
+ $res = sqlStatement("select lang_description from lang_languages where lang_id =?",array($lang_id));
  for ($iter = 0;$row = sqlFetchArray($res);$iter++) $result[$iter] = $row;
  $languageTitle = $result[0]{"lang_description"};   
  return $languageTitle;    
+}
+
+
+
+
+/**
+ * Returns language directionality as string 'rtl' or 'ltr'
+ * @param int $lang_id language code
+ * @return string 'ltr' 'rtl'
+ * @author Amiel <amielel@matrix.co.il>
+ */
+function getLanguageDir($lang_id) {
+    // validate language id
+    $lang_id = empty($lang_id) ? 1 : $lang_id;
+    // get language code
+    $row = sqlQuery('SELECT * FROM lang_languages WHERE lang_id = ?', array($lang_id));
+
+    return !empty($row['lang_is_rtl']) ? 'rtl' : 'ltr';
 }
 
 //----------------------------------
@@ -302,4 +319,5 @@ function mb_strpad($input, $length, $pad = ' ', $type = STR_PAD_RIGHT, $charset 
 
 return $output;
 }
+
 ?>

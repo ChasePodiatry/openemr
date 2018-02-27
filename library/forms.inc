@@ -59,15 +59,20 @@ function addForm($encounter, $form_name, $form_id, $formdir, $pid,
 {
 	if (!$user) $user = $_SESSION['authUser'];
 	if (!$group) $group = $_SESSION['authProvider'];
+
+        $arraySqlBind = array();
 	$sql = "insert into forms (date, encounter, form_name, form_id, pid, " .
 		"user, groupname, authorized, formdir) values (";
-	if($date == "NOW()")
+	if($date == "NOW()") {
 		$sql .= "$date";
-	else
-		$sql .= "'$date'";
-	$sql .= ", '$encounter', '$form_name', '$form_id', '$pid', '$user',          " .
-		"'$group', '$authorized', '$formdir')";
-	return sqlInsert( $sql );
+        }
+	else {
+		$sql .= "?";
+                array_push($arraySqlBind,$date);
+        }
+	$sql .= ", ?, ?, ?, ?, ?, ?, ?, ?)";
+        array_push($arraySqlBind,$encounter,$form_name,$form_id,$pid,$user,$group,$authorized,$formdir);
+	return sqlInsert($sql,$arraySqlBind);
 }
 
 function authorizeForm($id, $authorized = "1")
@@ -136,8 +141,31 @@ function getFormNameByFormdirAndFormid ($formdir,$form_id)
         return sqlQuery("select form_name from forms where formdir='$formdir' and form_id='$form_id'");
 }
 
+function getFormIdByFormdirAndFormid ($formdir,$form_id)
+{
+    $result = sqlQuery("select id from forms where formdir = ? and form_id =? ", array( $formdir, $form_id ) );
+    return $result['id'];
+}
+
 function getFormNameByFormdir ($formdir)
 {
 	return sqlQuery("select form_name from forms where formdir='$formdir'");
+}
+
+function getDocumentsByEncounter($patientID = null,$encounterID = null) {
+	$allDocuments = null;
+	$currentEncounter = ( $encounterID ) ? $encounterID : $_SESSION['encounter'];
+	$currentPatient = ( $patientID ) ? $patientID : $_SESSION['pid'];
+	
+	if($currentPatient != "" && $currentEncounter != "") {
+		$sql = "SELECT d.id, d.type, d.url, d.docdate, d.list_id, c.name,d.encounter_id FROM documents AS d, categories_to_documents AS cd, 
+			categories AS c WHERE d.foreign_id = ? AND d.encounter_id=? AND cd.document_id = d.id AND c.id = cd.category_id ORDER BY d.docdate DESC, d.id DESC";
+		$res = sqlStatement($sql,array($currentPatient,$currentEncounter));
+	
+		while ( $row = sqlFetchArray($res) ) {
+			$allDocuments[] = $row;
+		}
+	}
+	return $allDocuments;
 }
 ?>

@@ -38,7 +38,7 @@ $bat_filename = date("Y-m-d-Hi", $bat_time) . "-batch.";
 $bat_filename .= isset($_POST['bn_process_hcfa']) ? 'pdf' : 'txt';
 
 if (isset($_POST['bn_process_hcfa'])) {
-  $pdf =& new Cezpdf('LETTER');
+  $pdf = new Cezpdf('LETTER');
   $pdf->ezSetMargins(trim($_POST['top_margin'])+0,0,trim($_POST['left_margin'])+0,0);
   $pdf->selectFont($GLOBALS['fileroot'] . "/library/fonts/Courier.afm");
 }
@@ -119,7 +119,12 @@ function process_form($ar) {
   global $bill_info, $webserver_root, $bat_filename, $pdf;
 
   if (isset($ar['bn_x12']) || isset($ar['bn_x12_encounter']) || isset($ar['bn_process_hcfa']) || isset($ar['bn_hcfa_txt_file'])) {
-    $hlog = fopen("$webserver_root/library/freeb/process_bills.log", 'w');
+    if ($GLOBALS['billing_log_option'] == 1) {
+      $hlog = fopen($GLOBALS['OE_SITE_DIR']. "/edi/process_bills.log", 'a');
+    }
+    else { // ($GLOBALS['billing_log_option'] == 2)
+      $hlog = fopen($GLOBALS['OE_SITE_DIR']. "/edi/process_bills.log", 'w');
+    }
   }
 
   if (isset($ar['bn_external'])) {
@@ -135,7 +140,7 @@ function process_form($ar) {
   $claim_count = 0;
   foreach ($ar['claims'] as $claimid => $claim_array) {
 
-    $ta = split("-",$claimid);
+    $ta = explode("-",$claimid);
     $patient_id = $ta[0];
     $encounter  = $ta[1];
     $payer_id   = substr($claim_array['payer'], 1);
@@ -285,10 +290,18 @@ function process_form($ar) {
 <?php if (function_exists(html_header_show)) html_header_show(); ?>
 
 <link rel="stylesheet" href="<?php echo $css_header;?>" type="text/css">
+<script type="text/javascript" src="../../library/js/jquery-1.9.1.min.js"></script>
+<script>
+    $(document).ready( function() {
+        $("#close-link").click( function() {
+            window.close();
+        });
+    });
+</script>
 
 </head>
 <body class="body_top">
-<br><p><h3><?php xl('Billing queue results:','e'); ?></h3><a href="billing_report.php">back</a><ul>
+<br><p><h3><?php echo xlt('Billing queue results'); ?>:</h3><a href="#" id="close-link"><?php echo xlt('Close'); ?></a><ul>
 <?php
 foreach ($bill_info as $infoline) {
   echo nl2br($infoline);

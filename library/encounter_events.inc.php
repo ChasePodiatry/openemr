@@ -24,6 +24,11 @@
 //           Paul Simon K <paul@zhservices.com> 
 //
 // +------------------------------------------------------------------------------+
+
+
+require_once(dirname(__FILE__) . '/patient_tracker.inc.php');
+
+
 //===============================================================================
 //This section handles the events of payment screen.
 //===============================================================================
@@ -37,7 +42,7 @@ define('REPEAT_EVERY_WORK_DAY',4);
 function calendar_arrived($form_pid) {
 	$Today=date('Y-m-d');
 	//Take all recurring events relevent for today.
-	$result_event=sqlStatement("SELECT * FROM openemr_postcalendar_events WHERE pc_recurrtype='1' and pc_pid =? and pc_endDate!='0000-00-00' 
+	$result_event=sqlStatement("SELECT * FROM openemr_postcalendar_events WHERE pc_recurrtype != '0' and pc_pid = ? and pc_endDate != '0000-00-00'
 		and pc_eventDate < ? and pc_endDate >= ? ",
 		array($form_pid,$Today,$Today));
 	if(sqlNumRows($result_event)==0)//no repeating appointment
@@ -87,10 +92,39 @@ function calendar_arrived($form_pid) {
 					die;
 				 break;
 				 }
-				$pc_eventDate_array=split('-',$pc_eventDate);
-				//Find the next day as per the frequency definition.
-				$pc_eventDate=& __increment($pc_eventDate_array[2],$pc_eventDate_array[1],$pc_eventDate_array[0],
-								$pc_recurrspec_array['event_repeat_freq'],$pc_recurrspec_array['event_repeat_freq_type']);
+
+        // Added by Rod to handle repeats on nth or last given weekday of a month:
+        if ($row_event['pc_recurrtype'] == 2) {
+          $my_repeat_on_day = $pc_recurrspec_array['event_repeat_on_day'];
+          $my_repeat_on_num = $pc_recurrspec_array['event_repeat_on_num'];
+          $adate = getdate(strtotime($pc_eventDate));
+          $adate['mon'] += 1;
+          if ($adate['mon'] > 12) {
+            $adate['year'] += 1;
+            $adate['mon'] -= 12;
+          }
+          if ($my_repeat_on_num < 5) { // not last
+            $adate['mday'] = 1;
+            $dow = jddayofweek(cal_to_jd(CAL_GREGORIAN, $adate['mon'], $adate['mday'], $adate['year']));
+            if ($dow > $my_repeat_on_day) $dow -= 7;
+            $adate['mday'] += ($my_repeat_on_num - 1) * 7 + $my_repeat_on_day - $dow;
+          }
+          else { // last weekday of month
+            $adate['mday'] = cal_days_in_month(CAL_GREGORIAN, $adate['mon'], $adate['year']);
+            $dow = jddayofweek(cal_to_jd(CAL_GREGORIAN, $adate['mon'], $adate['mday'], $adate['year']));
+            if ($dow < $my_repeat_on_day) $dow += 7;
+            $adate['mday'] += $my_repeat_on_day - $dow;
+          }
+          $pc_eventDate = date('Y-m-d', mktime(0, 0, 0, $adate['mon'], $adate['mday'], $adate['year']));
+        } // end recurrtype 2
+
+        else { // pc_recurrtype is 1
+				  $pc_eventDate_array = explode('-', $pc_eventDate);
+				  // Find the next day as per the frequency definition.
+				  $pc_eventDate =& __increment($pc_eventDate_array[2], $pc_eventDate_array[1], $pc_eventDate_array[0],
+            $pc_recurrspec_array['event_repeat_freq'], $pc_recurrspec_array['event_repeat_freq_type']);
+        }
+
 			 }
 		 }
 	 }
@@ -277,19 +311,35 @@ function check_event_exist($eid)
 // insert an event
 // $args is mainly filled with content from the POST http var
 function InsertEvent($args,$from = 'general') {
+  $pc_recurrtype = '0';
+  if ($args['form_repeat']) {
+    $pc_recurrtype = $args['recurrspec']['event_repeat_on_freq'] ? '2' : '1';
+  }
+  $form_pid = empty($args['form_pid']) ? '' : $args['form_pid'];
+  $form_room = empty($args['form_room']) ? '' : $args['form_room'];
+
 	if($from == 'general'){
-    return sqlInsert("INSERT INTO openemr_postcalendar_events ( " .
+    $pc_eid = sqlInsert("INSERT INTO openemr_postcalendar_events ( " .
 			"pc_catid, pc_multiple, pc_aid, pc_pid, pc_title, pc_time, pc_hometext, " .
 			"pc_informant, pc_eventDate, pc_endDate, pc_duration, pc_recurrtype, " .
 			"pc_recurrspec, pc_startTime, pc_endTime, pc_alldayevent, " .
-			"pc_apptstatus, pc_prefcatid, pc_location, pc_eventstatus, pc_sharing, pc_facility,pc_billing_location " .
-			") VALUES (?,?,?,?,?,NOW(),?,?,?,?,?,?,?,?,?,?,?,?,?,1,1,?,?)",
-			array($args['form_category'],(isset($args['new_multiple_value']) ? $args['new_multiple_value'] : ''),$args['form_provider'],$args['form_pid'],
+			"pc_apptstatus, pc_prefcatid, pc_location, pc_eventstatus, pc_sharing, pc_facility,pc_billing_location,pc_room " .
+			") VALUES (?,?,?,?,?,NOW(),?,?,?,?,?,?,?,?,?,?,?,?,?,1,1,?,?,?)",
+			array($args['form_category'],(isset($args['new_multiple_value']) ? $args['new_multiple_value'] : ''),$args['form_provider'],$form_pid,
 			$args['form_title'],$args['form_comments'],$_SESSION['authUserID'],$args['event_date'],
-			fixDate($args['form_enddate']),$args['duration'],($args['form_repeat'] ? '1' : '0'),serialize($args['recurrspec']),
+			fixDate($args['form_enddate']),$args['duration'],$pc_recurrtype,serialize($args['recurrspec']),
 			$args['starttime'],$args['endtime'],$args['form_allday'],$args['form_apptstatus'],$args['form_prefcat'],
-			$args['locationspec'],(int)$args['facility'],(int)$args['billing_facility'])
+			$args['locationspec'],(int)$args['facility'],(int)$args['billing_facility'],$form_room)
 		);
+
+            //Manage tracker status.
+            if (!empty($form_pid)) {
+              manage_tracker_status($args['event_date'],$args['starttime'],$pc_eid,$form_pid,$_SESSION['authUser'],$args['form_apptstatus'],$args['form_room']);
+            }
+            $GLOBALS['temporary-eid-for-manage-tracker'] = $pc_eid; //used by manage tracker module to set correct encounter in tracker when check in
+
+            return $pc_eid;
+
 	}elseif($from == 'payment'){
 		sqlStatement("INSERT INTO openemr_postcalendar_events ( " .
 			"pc_catid, pc_multiple, pc_aid, pc_pid, pc_title, pc_time, " .
@@ -297,8 +347,8 @@ function InsertEvent($args,$from = 'general') {
 			"pc_recurrspec, pc_startTime, pc_endTime, pc_alldayevent, " .
 			"pc_apptstatus, pc_prefcatid, pc_location, pc_eventstatus, pc_sharing, pc_facility,pc_billing_location " .
 			") VALUES (?,?,?,?,?,NOW(),?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-			array($args['form_category'],$args['new_multiple_value'],$args['form_provider'],$args['form_pid'],$args['form_title'],
-				$args['event_date'],$args['form_enddate'],$args['duration'],($args['form_repeat'] ? '1' : '0'),serialize($args['recurrspec']),
+			array($args['form_category'],$args['new_multiple_value'],$args['form_provider'],$form_pid,$args['form_title'],
+				$args['event_date'],$args['form_enddate'],$args['duration'],$pc_recurrtype,serialize($args['recurrspec']),
 				$args['starttime'],$args['endtime'],$args['form_allday'],$args['form_apptstatus'],$args['form_prefcat'], $args['locationspec'],
 				1,1,(int)$args['facility'],(int)$args['billing_facility']));
 	}

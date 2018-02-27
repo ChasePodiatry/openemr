@@ -8,7 +8,7 @@
  * Administration->Service section by assigning code with
  * 'Service Reporting'.
  *
- * Copyright (C) 2006-2010 Rod Roark <rod@sunsetsystems.com>
+ * Copyright (C) 2006-2015 Rod Roark <rod@sunsetsystems.com>
  *
  * LICENSE: This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -31,7 +31,6 @@ $fake_register_globals=false;
 
 require_once("../globals.php");
 require_once("$srcdir/patient.inc");
-require_once("$srcdir/sql-ledger.inc");
 require_once("$srcdir/acl.inc");
 require_once("$srcdir/formatting.inc.php");
 require_once "$srcdir/options.inc.php";
@@ -46,10 +45,6 @@ $grand_total_amt_balance  = 0;
 
 
   if (! acl_check('acct', 'rep')) die(xlt("Unauthorized access."));
-
-  $INTEGRATED_AR = $GLOBALS['oer_config']['ws_accounting']['enabled'] === 2;
-
-  if (!$INTEGRATED_AR) SLConnect();
 
   $form_from_date = fixDate($_POST['form_from_date'], date('Y-m-d'));
   $form_to_date   = fixDate($_POST['form_to_date']  , date('Y-m-d'));
@@ -102,6 +97,16 @@ $grand_total_amt_balance  = 0;
 </style>
 
 <title><?php echo xlt('Financial Summary by Service Code') ?></title>
+
+<script language="JavaScript">
+
+ $(document).ready(function() {
+  var win = top.printLogSetup ? top : opener.top;
+  win.printLogSetup(document.getElementById('printbutton'));
+ });
+
+</script>
+
 </head>
 <body leftmargin='0' topmargin='0' marginwidth='0' marginheight='0' class="body_top">
 <span class='title'><?php echo xlt('Report'); ?> - <?php echo xlt('Financial Summary by Service Code'); ?></span>
@@ -179,7 +184,7 @@ $grand_total_amt_balance  = 0;
 
 					<?php if ($_POST['form_refresh'] || $_POST['form_csvexport']) { ?>
 					<div id="controls">
-					<a href='#' class='css_button' onclick='window.print()'>
+					<a href='#' class='css_button' id='printbutton'>
 						<span>
 							<?php echo xlt('Print'); ?>
 						</span>
@@ -209,7 +214,6 @@ $grand_total_amt_balance  = 0;
     $from_date = $form_from_date;
     $to_date   = $form_to_date;
     $sqlBindArray = array();
-    if ($INTEGRATED_AR) {
     $query = "select b.code,sum(b.units) as units,sum(b.fee) as billed,sum(ar_act.paid) as PaidAmount, " .
         "sum(ar_act.adjust) as AdjustAmount,(sum(b.fee)-(sum(ar_act.paid)+sum(ar_act.adjust))) as Balance, " .
         "c.financial_reporting " .
@@ -331,7 +335,6 @@ $bgcolor = ((++$orow & 1) ? "#ffdddd" : "#ddddff");
                 </table>    </div>
         <?php
       }
-    }
 	}
 
   if (! $_POST['form_csvexport']) {

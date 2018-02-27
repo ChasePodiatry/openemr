@@ -47,8 +47,7 @@
  }
 
  // Check authorization.
- $thisauth = acl_check('patients', 'demo');
- if ($thisauth != 'write')
+ if (!acl_check('patients', 'demo','','write'))
   die("Updating demographics is not authorized.");
 
  if ($_POST['form_import']) {
@@ -160,6 +159,7 @@
    $apatient['genericval1'],
    $apatient['genericname2'],
    $apatient['genericval2'],
+   $apatient['billing_note'],
    $apatient['phone_cell'],
    $apatient['hipaa_mail'],
    $apatient['hipaa_voice'],

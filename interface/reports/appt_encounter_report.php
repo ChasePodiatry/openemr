@@ -28,6 +28,7 @@ require_once("../globals.php");
 require_once("$srcdir/patient.inc");
 require_once("$srcdir/formatting.inc.php");
 require_once("../../custom/code_types.inc.php");
+require_once("$srcdir/billing.inc");
 
  $errmsg  = "";
  $alertmsg = ''; // not used yet but maybe later
@@ -105,7 +106,7 @@ function postError($msg) {
    $query .= "e.pc_eventDate = '$form_from_date' ";
   }
   if ($form_facility !== '') {
-   $query .= "AND e.pc_facility = '$form_facility' ";
+   $query .= "AND e.pc_facility = '" . add_escape_custom($form_facility) . "' ";
   }
   // $query .= "AND ( e.pc_catid = 5 OR e.pc_catid = 9 OR e.pc_catid = 10 ) " .
   $query .= "AND e.pc_pid != '' AND e.pc_apptstatus != '?' " .
@@ -133,9 +134,9 @@ function postError($msg) {
    $query .= "fe.date >= '$form_from_date 00:00:00' AND fe.date <= '$form_from_date 23:59:59' ";
   }
   if ($form_facility !== '') {
-   $query .= "AND fe.facility_id = '$form_facility' ";
+   $query .= "AND fe.facility_id = '" . add_escape_custom($form_facility) . "' ";
   }
-  $query .= ") ORDER BY docname, pc_eventDate, pc_startTime";
+  $query .= ") ORDER BY docname, IFNULL(pc_eventDate, encdate), pc_startTime";
 
   $res = sqlStatement($query);
  }
@@ -171,6 +172,18 @@ function postError($msg) {
 
 </style>
 <title><?php  xl('Appointments and Encounters','e'); ?></title>
+
+<script type="text/javascript" src="../../library/js/jquery.1.3.2.js"></script>
+
+<script language="JavaScript">
+
+ $(document).ready(function() {
+  var win = top.printLogSetup ? top : opener.top;
+  win.printLogSetup(document.getElementById('printbutton'));
+ });
+
+</script>
+
 </head>
 
 <body class="body_top">
@@ -260,7 +273,7 @@ function postError($msg) {
 					</a>
 
 					<?php if ($_POST['form_refresh']) { ?>
-					<a href='#' class='css_button' onclick='window.print()'>
+					<a href='#' class='css_button' id='printbutton'>
 						<span>
 							<?php xl('Print','e'); ?>
 						</span>
@@ -330,10 +343,7 @@ function postError($msg) {
     if ($code_types[$code_type]['just']) {
      if (! $brow['justify']) postError(xl('Needs Justify'));
     }
-    if ($code_type == 'COPAY') {
-     $copays -= $brow['fee'];
-     if ($brow['fee'] >= 0) postError(xl('Copay not positive'));
-    } else if ($code_types[$code_type]['fee']) {
+    if ($code_types[$code_type]['fee']) {
      $charges += $brow['fee'];
      if ($brow['fee'] == 0 && !$GLOBALS['ippf_specific']) postError(xl('Missing Fee'));
     } else {
@@ -364,6 +374,8 @@ function postError($msg) {
     } // End IPPF stuff
 
    } // end while
+   
+   $copays -= getPatientCopay($patient_id,$encounter);
 
    // The following is removed, perhaps temporarily, because gcac reporting
    // no longer depends on gcac issues.  -- Rod 2009-08-11
@@ -507,7 +519,6 @@ function postError($msg) {
 <script type="text/javascript" src="../../library/dynarch_calendar.js"></script>
 <?php include_once("{$GLOBALS['srcdir']}/dynarch_calendar_en.inc.php"); ?>
 <script type="text/javascript" src="../../library/dynarch_calendar_setup.js"></script>
-<script type="text/javascript" src="../../library/js/jquery.1.3.2.js"></script>
 
 <script language="Javascript">
  Calendar.setup({inputField:"form_from_date", ifFormat:"%Y-%m-%d", button:"img_from_date"});

@@ -1,29 +1,4 @@
 <?php
-/* $Id$ */
-//  ------------------------------------------------------------------------ //
-//                OpenEMR Electronic Medical Records System                  //
-//                   Copyright (c) 2005-2010 oemr.org                        //
-//                       <http://www.oemr.org/>                              //
-//  ------------------------------------------------------------------------ //
-//  This program is free software; you can redistribute it and/or modify     //
-//  it under the terms of the GNU General Public License as published by     //
-//  the Free Software Foundation; either version 2 of the License, or        //
-//  (at your option) any later version.                                      //
-//                                                                           //
-//  You may not change or alter any portion of this comment or credits       //
-//  of supporting developers from this source code or any supporting         //
-//  source code which is considered copyrighted (c) material of the          //
-//  original comment or credit authors.                                      //
-//                                                                           //
-//  This program is distributed in the hope that it will be useful,          //
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of           //
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the            //
-//  GNU General Public License for more details.                             //
-//                                                                           //
-//  You should have received a copy of the GNU General Public License        //
-//  along with this program; if not, write to the Free Software              //
-//  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA //
-//  ------------------------------------------------------------------------ //
 
 // Is this windows or non-windows? Create a boolean definition.
 if (!defined('IS_WINDOWS'))
@@ -32,24 +7,7 @@ if (!defined('IS_WINDOWS'))
 // Some important php.ini overrides. Defaults for these values are often
 // too small.  You might choose to adjust them further.
 //
-ini_set('memory_limit', '64M');
 ini_set('session.gc_maxlifetime', '14400');
-
-/* If the includer didn't specify, assume they want us to "fake" register_globals. */
-if (!isset($fake_register_globals)) {
-	$fake_register_globals = TRUE;
-}
-
-/* Pages with "myadmin" in the URL don't need register_globals. */
-$fake_register_globals =
-	$fake_register_globals && (strpos($_SERVER['REQUEST_URI'],"myadmin") === FALSE);
-
-// Emulates register_globals = On.  Moved to here from the bottom of this file
-// to address security issues.  Need to change everything requiring this!
-if ($fake_register_globals) {
-  extract($_GET);
-  extract($_POST);
-}
 
 // This is for sanitization of all escapes.
 //  (ie. reversing magic quotes if it's set)
@@ -86,9 +44,19 @@ if (IS_WINDOWS) {
  //convert windows path separators
  $webserver_root = str_replace("\\","/",$webserver_root); 
 }
+// Collect the apache server document root (and convert to windows slashes, if needed)
+$server_document_root = realpath($_SERVER['DOCUMENT_ROOT']);
+if (IS_WINDOWS) {
+ //convert windows path separators
+ $server_document_root = str_replace("\\","/",$server_document_root);
+}
 // Auto collect the relative html path, i.e. what you would type into the web
 // browser after the server address to get to OpenEMR.
-$web_root = substr($webserver_root, strlen($_SERVER['DOCUMENT_ROOT']));
+// This removes the leading portion of $webserver_root that it has in common with the web server's document
+// root and assigns the result to $web_root. In addition to the common case where $webserver_root is
+// /var/www/openemr and document root is /var/www, this also handles the case where document root is
+// /var/www/html and there is an Apache "Alias" command that directs /openemr to /var/www/openemr.
+$web_root = substr($webserver_root, strspn($webserver_root ^ $server_document_root, "\0"));
 // Ensure web_root starts with a path separator
 if (preg_match("/^[^\/]/",$web_root)) {
  $web_root = "/".$web_root;
@@ -105,10 +73,6 @@ if (preg_match("/^[^\/]/",$web_root)) {
 $GLOBALS['OE_SITES_BASE'] = "$webserver_root/sites";
 
 // The session name names a cookie stored in the browser.
-// If you modify session_name, then need to place the identical name in
-// the phpmyadmin file here: openemr/phpmyadmin/libraries/session.inc.php
-// at line 71. This was required after embedded new phpmyadmin version on
-// 05-12-2009 by Brady. Hopefully will figure out a more appropriate fix.
 // Now that restore_session() is implemented in javaScript, session IDs are
 // effectively saved in the top level browser window and there is no longer
 // any need to change the session name for different OpenEMR instances.
@@ -128,10 +92,23 @@ if (empty($_SESSION['site_id']) || !empty($_GET['site'])) {
     if (!is_dir($GLOBALS['OE_SITES_BASE'] . "/$tmp")) $tmp = "default";
   }
   if (empty($tmp) || preg_match('/[^A-Za-z0-9\\-.]/', $tmp))
-    die("Site ID '$tmp' contains invalid characters.");
+    die("Site ID '". htmlspecialchars($tmp,ENT_NOQUOTES) . "' contains invalid characters.");
+  if (isset($_SESSION['site_id']) && ($_SESSION['site_id'] != $tmp)) {
+    // This is to prevent using session to penetrate other OpenEMR instances within same multisite module
+    session_unset(); // clear session, clean logout
+    if (isset($landingpage) && !empty($landingpage)) {
+      // OpenEMR Patient Portal use
+      header('Location: index.php?site='.$tmp);
+    }
+    else {
+      // Main OpenEMR use
+      header('Location: ../login/login_frame.php?site='.$tmp); // Assuming in the interface/main directory
+    }
+    exit;
+  }
   if (!isset($_SESSION['site_id']) || $_SESSION['site_id'] != $tmp) {
     $_SESSION['site_id'] = $tmp;
-    error_log("Session site ID has been set to '$tmp'"); // debugging
+    //error_log("Session site ID has been set to '$tmp'"); // debugging
   }
 }
 
@@ -147,10 +124,12 @@ require_once(dirname(__FILE__) . "/../library/sqlconf.php");
 if (!$disable_utf8_flag) {    
  ini_set('default_charset', 'utf-8');
  $HTML_CHARSET = "UTF-8";
+ mb_internal_encoding('UTF-8');
 }
 else {
  ini_set('default_charset', 'iso-8859-1');
  $HTML_CHARSET = "ISO-8859-1";
+ mb_internal_encoding('ISO-8859-1');
 }
 
 // Root directory, relative to the webserver root:
@@ -177,11 +156,14 @@ $GLOBALS['edi_271_file_path'] = $GLOBALS['OE_SITE_DIR'] . "/edi/";
 //  open the openemr mysql connection.
 include_once (dirname(__FILE__) . "/../library/translation.inc.php");
 
-// Include convenience functions with shorter names than "htmlspecialchars"
-include_once (dirname(__FILE__) . "/../library/htmlspecialchars.inc.php");
+// Include convenience functions with shorter names than "htmlspecialchars" (for security)
+require_once (dirname(__FILE__) . "/../library/htmlspecialchars.inc.php");
+
+// Include sanitization/checking functions (for security)
+require_once (dirname(__FILE__) . "/../library/formdata.inc.php");
 
 // Include sanitization/checking function (for security)
-include_once (dirname(__FILE__) . "/../library/sanitize.inc.php");
+require_once (dirname(__FILE__) . "/../library/sanitize.inc.php");
 
 // Includes functions for date internationalization
 include_once (dirname(__FILE__) . "/../library/date_functions.php");
@@ -218,7 +200,7 @@ if (!empty($glrow)) {
   $GLOBALS['language_menu_show'] = array();
   $glres = sqlStatement("SELECT gl_name, gl_index, gl_value FROM globals " .
     "ORDER BY gl_name, gl_index");
-  while ($glrow = sqlFetchArray($glres)) {
+  while ($glrow = sqlFetchArray($glres)) {    
     $gl_name  = $glrow['gl_name'];
     $gl_value = $glrow['gl_value'];
     // Adjust for user specific settings
@@ -229,11 +211,12 @@ if (!empty($glrow)) {
         }
       }
     }
-    if ($gl_name == 'language_menu_other') {
+    if ($gl_name == 'language_menu_other') {       
       $GLOBALS['language_menu_show'][] = $gl_value;
     }
     else if ($gl_name == 'css_header') {
-      $GLOBALS[$gl_name] = "$rootdir/themes/" . $gl_value;
+        $GLOBALS[$gl_name] = $rootdir.'/themes/'. $gl_value;
+        $temp_css_theme_name = $gl_value;
     }
     else if ($gl_name == 'specific_application') {
       if      ($gl_value == '1') $GLOBALS['athletic_team'] = true;
@@ -254,6 +237,46 @@ if (!empty($glrow)) {
   if ((count($GLOBALS['language_menu_show']) >= 1) || $GLOBALS['language_menu_showall']) {
     $GLOBALS['language_menu_login'] = true;
   }
+  
+  
+// Additional logic to override theme name.
+// For RTL languages we substitute the theme name with the name of RTL-adapted CSS file.
+    $rtl_override = false;
+    if( isset( $_SESSION['language_direction'] )) {
+        if( $_SESSION['language_direction'] == 'rtl' && 
+        !strpos($GLOBALS['css_header'], 'rtl')  ) {
+
+            // the $css_header_value is set above
+            $rtl_override = true;
+        }
+    }     
+    
+    else { 
+        //$_SESSION['language_direction'] is not set, so will use the default language
+        $default_lang_id = sqlQuery('SELECT lang_id FROM lang_languages WHERE lang_description = ?',array($GLOBALS['language_default']));
+        
+        if ( getLanguageDir( $default_lang_id['lang_id'] ) === 'rtl' && !strpos($GLOBALS['css_header'], 'rtl')) { // @todo eliminate 1 SQL query
+            $rtl_override = true;
+        }
+    }
+    
+
+    // change theme name, if the override file exists.
+    if( $rtl_override ) {
+        // the $css_header_value is set above
+        $new_theme = 'rtl_' . $temp_css_theme_name;
+
+        // Check file existance 
+        if( file_exists( $include_root.'/themes/'.$new_theme ) ) {
+            $GLOBALS['css_header'] = $rootdir.'/themes/'.$new_theme;
+        } else {
+            // throw a warning if rtl'ed file does not exist.
+            error_log("Missing theme file ".text($include_root).'/themes/'.text($new_theme)   );
+        }
+    }
+    unset( $temp_css_theme_name, $new_theme,$rtl_override);
+    // end of RTL section
+  
   //
   // End of globals table processing.
 }
@@ -368,10 +391,6 @@ if (!isset($ignoreAuth) || !$ignoreAuth) {
   include_once("$srcdir/auth.inc");
 }
 
-// If you do not want your accounting system to have a customer added to it
-// for each insurance company, then set this to true.  SQL-Ledger currently
-// (2005-03-21) does nothing useful with insurance companies as customers.
-$GLOBALS['insurance_companies_are_not_customers'] = true;
 
 // This is the background color to apply to form fields that are searchable.
 // Currently it is applicable only to the "Search or Add Patient" form.
@@ -380,17 +399,11 @@ $GLOBALS['layout_search_color'] = '#ffff55';
 //EMAIL SETTINGS
 $SMTP_Auth = !empty($GLOBALS['SMTP_USER']);
 
-// Customize these if you are using SQL-Ledger with OpenEMR, or if you are
-// going to run sl_convert.php to convert from SQL-Ledger.
-//
-$sl_cash_acc    = '1060';       // sql-ledger account number for checking account
-$sl_ar_acc      = '1200';       // sql-ledger account number for accounts receivable
-$sl_income_acc  = '4320';       // sql-ledger account number for medical services income
-$sl_services_id = 'MS';         // sql-ledger parts table id for medical services
-$sl_dbname      = 'sql-ledger'; // sql-ledger database name
-$sl_dbuser      = 'sql-ledger'; // sql-ledger database login name
-$sl_dbpass      = 'secret';     // sql-ledger database login password
-//////////////////////////////////////////////////////////////////
+
+//module configurations
+$GLOBALS['baseModDir'] 	= "interface/modules/"; //default path of modules
+$GLOBALS['customModDir']= "custom_modules";	//non zend modules
+$GLOBALS['zendModDir']	= "zend_modules";	//zend modules
 
 // Don't change anything below this line. ////////////////////////////
 
@@ -424,4 +437,22 @@ if (version_compare(phpversion(), "5.2.1", ">=")) {
 ini_set("session.bug_compat_warn","off");
 
 //////////////////////////////////////////////////////////////////
+
+/* If the includer didn't specify, assume they want us to "fake" register_globals. */
+if (!isset($fake_register_globals)) {
+	$fake_register_globals = TRUE;
+}
+
+/* Pages with "myadmin" in the URL don't need register_globals. */
+$fake_register_globals =
+	$fake_register_globals && (strpos($_SERVER['REQUEST_URI'],"myadmin") === FALSE);
+
+
+// Emulates register_globals = On.  Moved to the bottom of globals.php to prevent
+// overrides of any variables used during global setup.
+// EXTR_SKIP flag set to prevent overriding any variables defined earlier
+if ($fake_register_globals) {
+  extract($_GET,EXTR_SKIP);
+  extract($_POST,EXTR_SKIP);
+}
 ?>

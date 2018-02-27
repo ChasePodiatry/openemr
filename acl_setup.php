@@ -63,6 +63,8 @@
      // xl('Nation Notes')
  $gacl->add_object_section('Patient Portal','patientportal'  , 10, 0, 'ACO');
      // xl('Patient Portal')
+  $gacl->add_object_section('Menus','menus'  , 10, 0, 'ACO');
+     // xl('Menus')
  // Create Accounting ACOs.
  //
  $gacl->add_object('acct', 'Billing (write optional)'           , 'bill' , 10, 0, 'ACO');
@@ -138,6 +140,11 @@
  $gacl->add_object('patientportal', 'Patient Portal' , 'portal'  , 10, 0, 'ACO');
      // xl('Patient Portal')
      
+ // Create ACOs for modules.
+ //
+ $gacl->add_object('menus', 'Modules' , 'modle'  , 10, 0, 'ACO');
+     // xl('Modules') 
+     
  // Create ACOs for patients.
  //
  $gacl->add_object('patients', 'Appointments (write,wsome optional)'      , 'appt' , 10, 0, 'ACO');
@@ -200,7 +207,7 @@ $breakglass  = $gacl->add_group('breakglass' , 'Emergency Login'    , $users, 'A
  // If this script is being used by OpenEMR's setup, then will
  //   incorporate the installation values. Otherwise will
 //    hardcode the 'admin' user.
- if ( isset($this->iuser) ) {
+ if (isset($this) && isset($this->iuser)) {
   $gacl->add_object('users', $this->iuname, $this->iuser, 10, 0, 'ARO');
   $gacl->add_group_object($admin, 'users', $this->iuser, 'ARO');
  }
@@ -210,7 +217,7 @@ $breakglass  = $gacl->add_group('breakglass' , 'Emergency Login'    , $users, 'A
  }
 
  // Declare return terms for language translations
- //  xl('write') xl('wsome') xl('addonly')
+ //  xl('write') xl('wsome') xl('addonly') xl('view')
 
  // Set permissions for administrators.
  //
@@ -223,7 +230,8 @@ $breakglass  = $gacl->add_group('breakglass' , 'Emergency Login'    , $users, 'A
    'patients'=>array('appt', 'demo', 'med', 'trans', 'docs', 'notes'),
    'sensitivities'=>array('normal', 'high'),
    'nationnotes'=>array('nn_configure'),
-   'patientportal'=>array('portal')
+   'patientportal'=>array('portal'),
+   'menus'=>array('modle')
   ),
   NULL, array($admin), NULL, NULL,
   1, 1, 'write', 'Administrators can do anything'
@@ -237,9 +245,25 @@ $breakglass  = $gacl->add_group('breakglass' , 'Emergency Login'    , $users, 'A
    'placeholder'=>array('filler')
   ),
   NULL, array($doc), NULL, NULL,
+  1, 1, 'view', 'Things that physicians can only read'
+ );
+     // xl('Things that physicians can only read')
+ $gacl->add_acl(
+  array(
+   'placeholder'=>array('filler')
+  ),
+  NULL, array($doc), NULL, NULL,
   1, 1, 'addonly', 'Things that physicians can read and enter but not modify'
  );
      // xl('Things that physicians can read and enter but not modify')
+ $gacl->add_acl(
+  array(
+   'placeholder'=>array('filler')
+  ),
+  NULL, array($doc), NULL, NULL,
+  1, 1, 'wsome', 'Things that physicians can read and partly modify'
+ );
+     // xl('Things that physicians can read and partly modify')
  $gacl->add_acl(
   array(
    'acct'=>array('disc', 'rep'),
@@ -257,6 +281,14 @@ $breakglass  = $gacl->add_group('breakglass' , 'Emergency Login'    , $users, 'A
  //
  $gacl->add_acl(
   array(
+   'placeholder'=>array('filler')
+  ),
+  NULL, array($clin), NULL, NULL,
+  1, 1, 'view', 'Things that clinicians can only read'
+ );
+     // xl('Things that clinicians can only read')
+ $gacl->add_acl(
+  array(
    'encounters'=>array('notes', 'relaxed'),
    'patients'=>array('demo', 'med', 'docs', 'notes'),
    'sensitivities'=>array('normal')
@@ -265,6 +297,15 @@ $breakglass  = $gacl->add_group('breakglass' , 'Emergency Login'    , $users, 'A
   1, 1, 'addonly', 'Things that clinicians can read and enter but not modify'
  );
      // xl('Things that clinicians can read and enter but not modify')
+
+ $gacl->add_acl(
+  array(
+   'placeholder'=>array('filler')
+  ),
+  NULL, array($clin), NULL, NULL,
+  1, 1, 'wsome', 'Things that clinicians can read and partly modify'
+ );
+     // xl('Things that clinicians can read and partly modify')
  $gacl->add_acl(
   array(
    'admin'=>array('drugs'),
@@ -283,9 +324,25 @@ $breakglass  = $gacl->add_group('breakglass' , 'Emergency Login'    , $users, 'A
    'placeholder'=>array('filler')
   ),
   NULL, array($front), NULL, NULL,
+  1, 1, 'view', 'Things that front office can only read'
+ );
+     // xl('Things that front office can only read')
+ $gacl->add_acl(
+  array(
+   'placeholder'=>array('filler')
+  ),
+  NULL, array($front), NULL, NULL,
   1, 1, 'addonly', 'Things that front office can read and enter but not modify'
  );
      // xl('Things that front office can read and enter but not modify')
+ $gacl->add_acl(
+  array(
+   'placeholder'=>array('filler')
+  ),
+  NULL, array($front), NULL, NULL,
+  1, 1, 'wsome', 'Things that front office can read and partly modify'
+ );
+     // xl('Things that front office can read and partly modify')
  $gacl->add_acl(
   array(
    'patients'=>array('appt', 'demo', 'trans', 'notes')
@@ -302,9 +359,25 @@ $breakglass  = $gacl->add_group('breakglass' , 'Emergency Login'    , $users, 'A
    'placeholder'=>array('filler')
   ),
   NULL, array($back), NULL, NULL,
+  1, 1, 'view', 'Things that back office can only read'
+ );
+     // xl('Things that back office can only read')
+ $gacl->add_acl(
+  array(
+   'placeholder'=>array('filler')
+  ),
+  NULL, array($back), NULL, NULL,
   1, 1, 'addonly', 'Things that back office can read and enter but not modify'
  );
      // xl('Things that back office can read and enter but not modify')
+ $gacl->add_acl(
+  array(
+   'placeholder'=>array('filler')
+  ),
+  NULL, array($back), NULL, NULL,
+  1, 1, 'wsome', 'Things that back office can read and partly modify'
+ );
+     // xl('Things that back office can read and partly modify')
  $gacl->add_acl(
   array(
    'acct'=>array('bill', 'disc', 'eob', 'rep', 'rep_a'),
@@ -316,6 +389,7 @@ $breakglass  = $gacl->add_group('breakglass' , 'Emergency Login'    , $users, 'A
   1, 1, 'write', 'Things that back office can read and modify'
  );
      // xl('Things that back office can read and modify')
+
  // Set permissions for Emergency Login.
  //
  $gacl->add_acl(
@@ -327,7 +401,8 @@ $breakglass  = $gacl->add_group('breakglass' , 'Emergency Login'    , $users, 'A
    'patients'=>array('appt', 'demo', 'med', 'trans', 'docs', 'notes'),
    'sensitivities'=>array('normal', 'high'),
    'nationnotes'=>array('nn_configure'),
-   'patientportal'=>array('portal')
+   'patientportal'=>array('portal'),
+   'menus'=>array('modle')
   ),
   NULL, array($breakglass), NULL, NULL,
   1, 1, 'write', 'Emergency Login user can do anything'

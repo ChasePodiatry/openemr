@@ -3,105 +3,65 @@
 /**
  * hold the PMA_List base class
  *
- * @version $Id$
+ * @package PhpMyAdmin
  */
+if (! defined('PHPMYADMIN')) {
+    exit;
+}
 
 /**
+ * Generic list class
+ *
  * @todo add caching
- * @since phpMyAdmin 2.9.10
  * @abstract
+ * @package PhpMyAdmin
+ * @since   phpMyAdmin 2.9.10
  */
-/* abstract public */ class PMA_List
+abstract class PMA_List extends ArrayObject
 {
-    /**
-     * @var array   the list items
-     * @access public
-     */
-    var $items = array();
-
-    /**
-     * @var array   details for list items
-     * @access public
-     */
-    var $details = array();
-
-    /**
-     * @var bool    whether we need to re-index the database list for consistency keys
-     * @access protected
-     */
-    var $_need_to_reindex = false;
-
     /**
      * @var mixed   empty item
      */
-    var $item_empty = '';
+    protected $item_empty = '';
 
     /**
-     * returns first item from list
+     * PMA_List constructor
      *
-     * @uses    PMA_List::$items to get first item
-     * @uses    reset() to retrive first item from PMA_List::$items array
-     * @return  string  value of first item
+     * @param array  $array          The input parameter accepts an array or an
+     *                               Object.
+     * @param int    $flags          Flags to control the behaviour of the
+     *                               ArrayObject object.
+     * @param string $iterator_class Specify the class that will be used for
+     *                               iteration of the ArrayObject object.
+     *                               ArrayIterator is the default class used.
      */
-    function getFirst()
-    {
-        return reset($this->items);
-    }
-
-    /**
-     * returns item only if there is only one in the list
-     *
-     * @uses    PMA_List::count() to decide what to return
-     * @uses    PMA_List::getFirst() to return it
-     * @uses    PMA_List::getEmpty() to return it
-     * @return  single item
-     */
-    function getSingleItem()
-    {
-        if ($this->count() === 1) {
-            return $this->getFirst();
-        }
-
-        return $this->getEmpty();
-    }
-
-    /**
-     * returns list item count
-     *
-     * @uses    PMA_List::$items to count it items
-     * @uses    count() to count items in PMA_List::$items
-     * @return  integer PMA_List::$items count
-     */
-    function count()
-    {
-        return count($this->items);
+    public function __construct(
+        $array = array(), $flags = 0, $iterator_class = "ArrayIterator"
+    ) {
+        parent::__construct($array, $flags, $iterator_class);
     }
 
     /**
      * defines what is an empty item (0, '', false or null)
      *
-     * @uses    PMA_List::$item_empty as return value
-     * @return  mixed   an empty item
+     * @return mixed   an empty item
      */
-    function getEmpty()
+    public function getEmpty()
     {
         return $this->item_empty;
     }
 
     /**
      * checks if the given db names exists in the current list, if there is
-     * missing at least one item it reutrns false other wise true
+     * missing at least one item it returns false otherwise true
      *
-     * @uses    PMA_List::$items to check for existence of specific item
-     * @uses    func_get_args()
-     * @uses    in_array() to check if given arguments exists in PMA_List::$items
-     * @param   string  $db_name,..     one or more mysql result resources
-     * @return  boolean true if all items exists, otheriwse false
+     * @return boolean true if all items exists, otherwise false
      */
-    function exists()
+    public function exists()
     {
+        $this_elements = $this->getArrayCopy();
         foreach (func_get_args() as $result) {
-            if (! in_array($result, $this->items)) {
+            if (! in_array($result, $this_elements)) {
                 return false;
             }
         }
@@ -112,29 +72,31 @@
     /**
      * returns HTML <option>-tags to be used inside <select></select>
      *
-     * @uses    PMA_List::$items to build up the option items
-     * @uses    PMA_List::getDefault() to mark this as selected if requested
-     * @uses    htmlspecialchars() to escape items
-     * @param   mixed   $selected   the selected db or true for selecting current db
-     * @param   boolean $include_information_schema
-     * @return  string  HTML option tags
+     * @param mixed   $selected                   the selected db or true for
+     *                                            selecting current db
+     * @param boolean $include_information_schema whether include information schema
+     *
+     * @return string  HTML option tags
      */
-    function getHtmlOptions($selected = '', $include_information_schema = true)
-    {
+    public function getHtmlOptions(
+        $selected = '', $include_information_schema = true
+    ) {
         if (true === $selected) {
             $selected = $this->getDefault();
         }
 
         $options = '';
-        foreach ($this->items as $each_db) {
-            if (false === $include_information_schema && 'information_schema' === $each_db) {
+        foreach ($this as $each_item) {
+            if (false === $include_information_schema
+                && $GLOBALS['dbi']->isSystemSchema($each_item)
+            ) {
                 continue;
             }
-            $options .= '<option value="' . htmlspecialchars($each_db) . '"';
-            if ($selected === $each_db) {
+            $options .= '<option value="' . htmlspecialchars($each_item) . '"';
+            if ($selected === $each_item) {
                 $options .= ' selected="selected"';
             }
-            $options .= '>' . htmlspecialchars($each_db) . '</option>' . "\n";
+            $options .= '>' . htmlspecialchars($each_item) . '</option>' . "\n";
         }
 
         return $options;
@@ -143,10 +105,9 @@
     /**
      * returns default item
      *
-     * @uses    PMA_List::getEmpty() as fallback
-     * @return  string  default item
+     * @return string  default item
      */
-    function getDefault()
+    public function getDefault()
     {
         return $this->getEmpty();
     }
@@ -154,8 +115,7 @@
     /**
      * builds up the list
      *
-     * @abstract
+     * @return void
      */
-    /* abstract public */ function build() {}
+    abstract public function build();
 }
-?>

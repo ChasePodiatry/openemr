@@ -1,10 +1,18 @@
 <?php
-// Copyright (C) 2005-2011 Rod Roark <rod@sunsetsystems.com>
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either version 2
-// of the License, or (at your option) any later version.
+/**
+ * add or edit a medical problem.
+ *
+ * Copyright (C) 2005-2011 Rod Roark <rod@sunsetsystems.com>
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * @package OpenEMR
+ * @author  Rod Roark <rod@sunsetsystems.com>
+ * @link    http://www.open-emr.org
+ */
 
 //SANITIZE ALL ESCAPES
 $sanitize_all_escapes=true;
@@ -14,25 +22,29 @@ $sanitize_all_escapes=true;
 $fake_register_globals=false;
 //
 
-require_once("../../globals.php");
-require_once("$srcdir/lists.inc");
-require_once("$srcdir/patient.inc");
-require_once("$srcdir/acl.inc");
-require_once("$srcdir/options.inc.php");
-require_once("$srcdir/../custom/code_types.inc.php");
-require_once("$srcdir/csv_like_join.php");
-require_once("$srcdir/htmlspecialchars.inc.php");
-require_once("$srcdir/formdata.inc.php");
+require_once('../../globals.php');
+require_once($GLOBALS['srcdir'].'/lists.inc');
+require_once($GLOBALS['srcdir'].'/patient.inc');
+require_once($GLOBALS['srcdir'].'/acl.inc');
+require_once($GLOBALS['srcdir'].'/options.inc.php');
+require_once($GLOBALS['fileroot'].'/custom/code_types.inc.php');
+require_once($GLOBALS['srcdir'].'/csv_like_join.php');
+require_once($GLOBALS['srcdir'].'/htmlspecialchars.inc.php');
+require_once($GLOBALS['srcdir'].'/formdata.inc.php');
 
-if ($ISSUE_TYPES['football_injury']) {
-  // Most of the logic for the "football injury" issue type comes from this
-  // included script.  We might eventually refine this approach to support
-  // a plug-in architecture for custom issue types.
-  require_once("$srcdir/football_injury.inc.php");
+if (isset($ISSUE_TYPES['football_injury'])) {
+  if ($ISSUE_TYPES['football_injury']) {
+    // Most of the logic for the "football injury" issue type comes from this
+    // included script.  We might eventually refine this approach to support
+    // a plug-in architecture for custom issue types.
+    require_once($GLOBALS['srcdir'].'/football_injury.inc.php');
+  }
 }
-if ($ISSUE_TYPES['ippf_gcac']) {
-  // Similarly for IPPF issues.
-  require_once("$srcdir/ippf_issues.inc.php");
+if (isset($ISSUE_TYPES['ippf_gcac'])) {
+  if ($ISSUE_TYPES['ippf_gcac']) {
+    // Similarly for IPPF issues.
+    require_once($GLOBALS['srcdir'].'/ippf_issues.inc.php');
+  }
 }
 
 $issue = $_REQUEST['issue'];
@@ -45,9 +57,8 @@ $thisenc = 0 + (empty($_REQUEST['thisenc']) ? 0 : $_REQUEST['thisenc']);
 // A nonempty thistype is an issue type to be forced for a new issue.
 $thistype = empty($_REQUEST['thistype']) ? '' : $_REQUEST['thistype'];
 
-$thisauth = acl_check('patients', 'med');
-if ($issue && $thisauth != 'write') die(xlt("Edit is not authorized!"));
-if ($thisauth != 'write' && $thisauth != 'addonly') die(xlt("Add is not authorized!"));
+if ($issue && !acl_check('patients','med','','write') ) die(xlt("Edit is not authorized!"));
+if ( !acl_check('patients','med','',array('write','addonly') )) die(xlt("Add is not authorized!"));
 
 $tmp = getPatientData($thispid, "squad");
 if ($tmp['squad'] && ! acl_check('squads', $tmp['squad']))
@@ -106,6 +117,123 @@ function issueTypeIndex($tstr) {
   return $i;
 }
 
+function ActiveIssueCodeRecycleFn($thispid2, $ISSUE_TYPES2) {
+///////////////////////////////////////////////////////////////////////
+// Active Issue Code Recycle Function authored by epsdky (2014-2015) //
+///////////////////////////////////////////////////////////////////////
+
+  $modeIssueTypes = array();
+  $issueTypeIdx2 = array();
+  $idx2 = 0;
+
+  foreach ($ISSUE_TYPES2 as $issueTypeX => $isJunk) {
+
+    $modeIssueTypes[$idx2] = $issueTypeX;
+    $issueTypeIdx2[$issueTypeX] = $idx2;
+    ++$idx2;    
+  
+  }
+
+  $pe2 = array($thispid2);
+  $qs2 = str_repeat('?, ', count($modeIssueTypes) - 1) . '?';
+  $sqlParameters2 = array_merge($pe2, $modeIssueTypes);
+
+  $codeList2 = array();
+
+  $issueCodes2 = sqlStatement("SELECT diagnosis FROM lists WHERE pid = ? AND enddate is NULL AND type IN ($qs2)", $sqlParameters2);
+
+  while ($issueCodesRow2 = sqlFetchArray($issueCodes2)) {
+
+    if ($issueCodesRow2['diagnosis'] != "") {
+
+      $someCodes2 = explode(";", $issueCodesRow2['diagnosis']);
+      $codeList2 = array_merge($codeList2, $someCodes2);
+
+    }
+
+  }
+
+  if ($codeList2) {
+
+    $codeList2 = array_unique($codeList2);
+    sort($codeList2);
+
+  }
+
+  $memberCodes = array();
+  $memberCodes[0] = array();
+  $memberCodes[1] = array();
+  $memberCodes[2] = array();
+
+  $allowedCodes2 = array();
+  $allowedCodes2[0] = collect_codetypes("medical_problem");
+  $allowedCodes2[1] = collect_codetypes("diagnosis");
+  $allowedCodes2[2] = collect_codetypes("drug");
+
+  // Test membership of codes to each code type set
+  foreach ($allowedCodes2 as $akey1 => $allowCodes2) {
+
+    foreach ($codeList2 as $listCode2) {
+
+      list($codeTyX,) = explode(":", $listCode2);
+
+      if (in_array($codeTyX, $allowCodes2)) {
+            
+        array_push($memberCodes[$akey1], $listCode2);
+
+      }
+
+    }
+
+  }
+
+  // output sets of display options
+  $displayCodeSets[0] = $memberCodes[0]; // medical_problem
+  $displayCodeSets[1] = array_merge($memberCodes[1], $memberCodes[2]);  // allergy
+  $displayCodeSets[2] = array_merge($memberCodes[2], $memberCodes[1]);  // medication
+  $displayCodeSets[3] = $memberCodes[1];  // default
+
+  echo "var listBoxOptionSets = new Array();\n\n";
+
+  foreach ($displayCodeSets as $akey => $displayCodeSet) {
+
+    echo "listBoxOptionSets[" . attr($akey) . "] = new Array();\n";
+  
+    if ($displayCodeSet) {
+
+      foreach ($displayCodeSet as $dispCode2) {
+
+        $codeDesc2 = lookup_code_descriptions($dispCode2);
+        echo "listBoxOptionSets[" . attr($akey) . "][listBoxOptionSets[" . attr($akey) . "].length] = new Option('" . attr($dispCode2) . " (" . attr(trim($codeDesc2)) . ") ' ,'" . attr($dispCode2) . "' , false, false);\n";
+
+      }
+    
+    }
+ 
+  }
+
+  // map issues to a set of display options
+  $modeIndexMapping = array();
+
+  foreach ($modeIssueTypes as $akey2 => $isJunk) $modeIndexMapping[$akey2] = 3;
+
+  if (array_key_exists("medical_problem", $issueTypeIdx2))
+    $modeIndexMapping[$issueTypeIdx2['medical_problem']] = 0;
+  if (array_key_exists("allergy", $issueTypeIdx2))
+    $modeIndexMapping[$issueTypeIdx2['allergy']] = 1;
+  if (array_key_exists("medication", $issueTypeIdx2))
+    $modeIndexMapping[$issueTypeIdx2['medication']] = 2;
+
+  echo "\nvar listBoxOptions2 = new Array();\n\n";
+
+  foreach ($modeIssueTypes as $akey2 => $isJunk) {
+    echo "listBoxOptions2[" . attr($akey2) . "] = listBoxOptionSets[" . attr($modeIndexMapping[$akey2]) . "];\n";
+  }
+///////////////////////////////////////////////////////////////////////
+// End of Active Issue Code Recycle Function main code block         //
+///////////////////////////////////////////////////////////////////////
+}
+
 // If we are saving, then save and close the window.
 //
 if ($_POST['form_save']) {
@@ -148,7 +276,9 @@ if ($_POST['form_save']) {
     "outcome = '"     . add_escape_custom($_POST['form_outcome'])      . "', " .
     "destination = '" . add_escape_custom($_POST['form_destination'])   . "', " .
     "reaction ='"     . add_escape_custom($_POST['form_reaction'])     . "', " .
-    "erx_uploaded = '0' " .
+    "severity_al ='"     . add_escape_custom($_POST['form_severity_id'])     . "', " .
+    "erx_uploaded = '0', " .
+    "modifydate = NOW() " .
     "WHERE id = '" . add_escape_custom($issue) . "'";
     sqlStatement($query);
     if ($text_type == "medication" && enddate != '') {
@@ -164,7 +294,7 @@ if ($_POST['form_save']) {
     "date, pid, type, title, activity, comments, begdate, enddate, returndate, " .
     "diagnosis, occurrence, classification, referredby, user, groupname, " .
     "outcome, destination, reinjury_id, injury_grade, injury_part, injury_type, " .
-    "reaction " .
+    "reaction, severity_al " .
     ") VALUES ( " .
     "NOW(), " .
     "'" . add_escape_custom($thispid) . "', " .
@@ -187,7 +317,8 @@ if ($_POST['form_save']) {
     "'" . add_escape_custom($_POST['form_injury_grade']) . "', " .
     "'" . add_escape_custom($form_injury_part)          . "', " .
     "'" . add_escape_custom($form_injury_type)          . "', " .
-    "'" . add_escape_custom($_POST['form_reaction'])         . "' " .
+    "'" . add_escape_custom($_POST['form_reaction'])         . "', " .
+    "'" . add_escape_custom($_POST['form_severity_id'])         . "' " .
    ")");
 
   }
@@ -264,12 +395,12 @@ div.section {
 
 </style>
 
-<style type="text/css">@import url(../../../library/dynarch_calendar.css);</style>
-<script type="text/javascript" src="../../../library/dynarch_calendar.js"></script>
-<?php include_once("{$GLOBALS['srcdir']}/dynarch_calendar_en.inc.php"); ?>
-<script type="text/javascript" src="../../../library/dynarch_calendar_setup.js"></script>
-<script type="text/javascript" src="../../../library/textformat.js"></script>
-<script type="text/javascript" src="../../../library/dialog.js"></script>
+<style type="text/css">@import url(<?php echo $GLOBALS['webroot']; ?>/library/dynarch_calendar.css);</style>
+<script type="text/javascript" src="<?php echo $GLOBALS['webroot']; ?>/library/dynarch_calendar.js"></script>
+<?php require_once($GLOBALS['srcdir'].'/dynarch_calendar_en.inc.php'); ?>
+<script type="text/javascript" src="<?php echo $GLOBALS['webroot']; ?>/library/dynarch_calendar_setup.js"></script>
+<script type="text/javascript" src="<?php echo $GLOBALS['webroot']; ?>/library/textformat.js"></script>
+<script type="text/javascript" src="<?php echo $GLOBALS['webroot']; ?>/library/dialog.js"></script>
 
 <script language="JavaScript">
 
@@ -278,33 +409,39 @@ div.section {
  var aitypes = new Array(); // issue type attributes
  var aopts   = new Array(); // Option objects
 <?php
- // "Clickoptions" is a feature by Mark Leeds that provides for one-click
- // access to preselected lists of issues in each category.  Here we get
- // the issue titles from the user-customizable file and write JavaScript
- // statements that will build an array of arrays of Option objects.
- //
- $clickoptions = array();
- if (is_file($GLOBALS['OE_SITE_DIR'] . "/clickoptions.txt"))
-  $clickoptions = file($GLOBALS['OE_SITE_DIR'] . "/clickoptions.txt");
- $i = 0;
+ $i = 0;  
  foreach ($ISSUE_TYPES as $key => $value) {
   echo " aitypes[$i] = " . attr($value[3]) . ";\n";
   echo " aopts[$i] = new Array();\n";
-  foreach($clickoptions as $line) {
-   $line = trim($line);
-   if (substr($line, 0, 1) != "#") {
-    if (strpos($line, $key) !== false) {
-     $text = addslashes(substr($line, strpos($line, "::") + 2));
-     echo " aopts[$i][aopts[$i].length] = new Option('$text', '$text', false, false);\n";
+  $qry = sqlStatement("SELECT * FROM list_options WHERE list_id = ?",array($key."_issue_list"));
+  while($res = sqlFetchArray($qry)){
+    echo " aopts[$i][aopts[$i].length] = new Option('".attr(trim($res['option_id']))."', '".attr(xl_list_label(trim($res['title'])))."', false, false);\n";
+    if ($res['codes']) {
+      echo " aopts[$i][aopts[$i].length-1].setAttribute('data-code','".attr(trim($res['codes']))."');\n";
     }
-   }
   }
   ++$i;
  }
+
+///////////     
+ActiveIssueCodeRecycleFn($thispid, $ISSUE_TYPES);  
+///////////
 ?>
 
 <?php require($GLOBALS['srcdir'] . "/restoreSession.php"); ?>
 
+ ///////////////////////////
+ function codeBoxFunction2() {
+  var f = document.forms[0];
+  var x2 = f.form_codeSelect2.options[f.form_codeSelect2.selectedIndex].value;
+  f.form_codeSelect2.selectedIndex = -1;
+  var x6 = f.form_diagnosis.value;
+  if (x6.length > 0) x6 += ";";
+  x6 += x2;
+  f.form_diagnosis.value = x6;
+ }
+ ///////////////////////////
+ //
  // React to selection of an issue type.  This loads the associated
  // shortcuts into the selection list of titles, and determines which
  // rows are displayed or hidden.
@@ -317,6 +454,18 @@ div.section {
    theopts[i] = aopts[index][i];
   }
   document.getElementById('row_titles').style.display = i ? '' : 'none';
+  //
+  ///////////////////////
+  var listBoxOpts2 = f.form_codeSelect2.options;
+  listBoxOpts2.length = 0;
+  var ix = 0;
+  for (ix = 0; ix < listBoxOptions2[index].length; ++ix) {
+   listBoxOpts2[ix] = listBoxOptions2[index][ix];
+   listBoxOpts2[ix].title = listBoxOptions2[index][ix].text;
+  }
+  document.getElementById('row_codeSelect2').style.display = ix ? '' : 'none';
+  //////////////////////
+  //
   // Show or hide various rows depending on issue type, except do not
   // hide the comments or referred-by fields if they have data.
   var comdisp = (aitypes[index] == 1) ? 'none' : '';
@@ -334,6 +483,7 @@ div.section {
   document.getElementById('row_occurrence'    ).style.display = comdisp;
   document.getElementById('row_classification').style.display = injdisp;
   document.getElementById('row_reinjury_id'   ).style.display = injdisp;
+  document.getElementById('row_severity'      ).style.display = alldisp;
   document.getElementById('row_reaction'      ).style.display = alldisp;
   document.getElementById('row_referredby'    ).style.display = (f.form_referredby.value) ? '' : comdisp;
   document.getElementById('row_comments'      ).style.display = (f.form_comments.value  ) ? '' : revdisp;
@@ -369,9 +519,11 @@ div.section {
  }
 
  // If a clickoption title is selected, copy it to the title field.
+ // If it has a code, add that too.
  function set_text() {
   var f = document.forms[0];
   f.form_title.value = f.form_titles.options[f.form_titles.selectedIndex].text;
+  f.form_diagnosis.value = f.form_titles.options[f.form_titles.selectedIndex].getAttribute('data-code');
   f.form_titles.selectedIndex = -1;
  }
 
@@ -411,7 +563,7 @@ div.section {
   if (cb.value == '1'){
    var today = new Date();
    f.form_end.value = '' + (today.getYear() + 1900) + '-' +
-    (today.getMonth() + 1) + '-' + today.getDate();
+    ("0" + (today.getMonth() + 1)).slice(-2) + '-' + ("0" + today.getDate()).slice(-2);
    f.form_end.focus();
   }
  }
@@ -421,6 +573,7 @@ div.section {
 function set_related(codetype, code, selector, codedesc) {
  var f = document.forms[0];
  var s = f.form_diagnosis.value;
+ var title = f.form_title.value;
  if (code) {
   if (s.length > 0) s += ';';
   s += codetype + ':' + code;
@@ -428,16 +581,37 @@ function set_related(codetype, code, selector, codedesc) {
   s = '';
  }
  f.form_diagnosis.value = s;
+ if(title == '') f.form_title.value = codedesc;
 }
 
 // This invokes the find-code popup.
 function sel_diagnosis() {
- dlgopen('../encounter/find_code_popup.php?codetype=<?php echo attr(collect_codetypes("diagnosis","csv")) ?>', '_blank', 500, 400);
+<?php
+$url = '../encounter/find_code_popup.php?codetype=';
+if($irow['type'] == 'medical_problem') {
+  $url .= collect_codetypes("medical_problem", "csv");
+}
+else {
+  $url .= collect_codetypes("diagnosis","csv");
+  $tmp  = collect_codetypes("drug","csv");
+  if($irow['type'] == 'allergy') {
+    if ($tmp) $url .= ",$tmp";
+  }
+  else if($irow['type'] == 'medication') {
+    if ($tmp) $url .= ",$tmp&default=$tmp";
+  }
+}
+?>
+ dlgopen('<?php echo $url; ?>', '_blank', 700, 500);
 }
 
 // Check for errors when the form is submitted.
 function validate() {
  var f = document.forms[0];
+ if(f.form_begin.value > f.form_end.value && (f.form_end.value)) {
+  alert("<?php echo addslashes(xl('Please Enter End Date greater than Begin Date!')); ?>");
+  return false;
+ }
  if (! f.form_title.value) {
   alert("<?php echo addslashes(xl('Please enter a title!')); ?>");
   return false;
@@ -506,12 +680,21 @@ function divclick(cb, divid) {
   </td>
  </tr>
 
+ <tr id='row_codeSelect2'>
+ <td><b><?php echo xlt('Active Issue Codes'); ?>:</b>
+ </td>
+ <td>
+  <select name='form_codeSelect2' size='4' onchange="codeBoxFunction2()" style="max-width:100%;">
+  </select>
+ </td>
+ </tr>
+
  <tr id='row_diagnosis'>
-  <td valign='top' nowrap><b><?php echo xlt('Diagnosis Code'); ?>:</b></td>
+  <td valign='top' nowrap><b><?php echo xlt('Coding'); ?>:</b></td>
   <td>
    <input type='text' size='50' name='form_diagnosis'
     value='<?php echo attr($irow['diagnosis']) ?>' onclick='sel_diagnosis()'
-    title='<?php echo xla('Click to select or change diagnoses'); ?>'
+    title='<?php echo xla('Click to select or change coding'); ?>'
     style='width:100%' readonly />
   </td>
  </tr>
@@ -665,11 +848,20 @@ echo generate_select_list('form_medical_type', 'medical_type', $irow['injury_typ
   </td>
  </tr>
  <!-- Reaction For Medication Allergy -->
+  <tr id='row_severity'>
+    <td valign='top' nowrap><b><?php echo xlt('Severity'); ?>:</b></td>
+    <td><?php
+        $severity=$irow['severity_al'];
+        generate_form_field(array('data_type'=>1,'field_id'=>'severity_id','list_id'=>'severity_ccda','empty_title'=>'SKIP'), $severity);
+      ?>  
+    </td>
+  </tr>
   <tr id='row_reaction'>
    <td valign='top' nowrap><b><?php echo xlt('Reaction'); ?>:</b></td>
    <td>
-    <input type='text' size='40' name='form_reaction' value='<?php echo attr($irow['reaction']) ?>'
-     style='width:100%' title='<?php echo xla('Allergy Reaction'); ?>' />
+     <?php
+        echo generate_select_list('form_reaction', 'reaction', $irow['reaction'], '', '', '', '');
+     ?>
    </td>
   </tr>
  <!-- End of reaction -->

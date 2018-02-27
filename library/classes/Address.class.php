@@ -27,7 +27,7 @@ class Address extends ORDataObject{
 	/**
 	 * Constructor sets all Address attributes to their default value
 	 */
-	function Address($id = "", $foreign_id = "")	{
+	function __construct($id = "", $foreign_id = "")	{
 		$this->id = $id;
 		$this->foreign_id = $foreign_id;
 		$this->_table = "addresses";
@@ -44,19 +44,19 @@ class Address extends ORDataObject{
 
 
 	}
-	function factory_address($foreign_id = "") {
+	static function factory_address($foreign_id = "") {
 		if (empty($foreign_id)) {
 			 $foreign_id= "like '%'";
 		}
 		else {
-			$foreign_id= " = '" . mysql_real_escape_string(strval($foreign_id)) . "'";
+			$foreign_id= " = '" . add_escape_custom(strval($foreign_id)) . "'";
 		}
 		$a = new Address();
 		$sql = "SELECT id FROM  " . $a->_table . " WHERE foreign_id " .$foreign_id ;
 		//echo $sql . "<bR />";
 		$results = sqlQ($sql);
 		//echo "sql: $sql";
-		$row = mysql_fetch_array($results);
+		$row = sqlFetchArray($results);
 		if (!empty($row)) {
 			$a = new Address($row['id']);
 		}

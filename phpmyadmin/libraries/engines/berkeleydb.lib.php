@@ -1,16 +1,25 @@
 <?php
 /* vim: set expandtab sw=4 ts=4 sts=4: */
 /**
- * @version $Id$
+ * The BerkeleyDB storage engine
+ *
+ * @package PhpMyAdmin-Engines
  */
+if (! defined('PHPMYADMIN')) {
+    exit;
+}
 
 /**
- *
+ * Load BDB class.
  */
-include_once './libraries/engines/bdb.lib.php';
+require_once './libraries/engines/bdb.lib.php';
 
-class PMA_StorageEngine_berkeleydb extends PMA_StorageEngine_bdb
+/**
+ * This is same as BDB
+ *
+ * @package PhpMyAdmin-Engines
+ */
+class PMA_StorageEngine_Berkeleydb extends PMA_StorageEngine_Bdb
 {
 }
 
-?>

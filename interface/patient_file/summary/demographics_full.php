@@ -24,14 +24,13 @@ require_once("$srcdir/erx_javascript.inc.php");
  $result2 = getEmployerData($pid);
 
  // Check authorization.
- $thisauth = acl_check('patients', 'demo');
  if ($pid) {
-  if ($thisauth != 'write')
+  if (!acl_check('patients', 'demo', '', 'write'))
    die(xl('Updating demographics is not authorized.'));
   if ($result['squad'] && ! acl_check('squads', $result['squad']))
    die(xl('You are not authorized to access this squad.'));
  } else {
-  if ($thisauth != 'write' && $thisauth != 'addonly')
+  if (!acl_check('patients', 'demo', '', array('write','addonly') ))
    die(xl('Adding demographics is not authorized.'));
  }
 
@@ -41,8 +40,11 @@ $CPR = 4; // cells per row
 // $langi = getLanguages();
 // $ethnoraciali = getEthnoRacials();
 // $provideri = getProviderInfo();
-
-$insurancei = getInsuranceProviders();
+if ($GLOBALS['insurance_information'] != '0') {
+    $insurancei = getInsuranceProvidersExtra();
+}else{
+	$insurancei = getInsuranceProviders();
+}
 
 $fres = sqlStatement("SELECT * FROM layout_options " .
   "WHERE form_id = 'DEM' AND uor > 0 " .
@@ -61,11 +63,11 @@ $fres = sqlStatement("SELECT * FROM layout_options " .
 <script type="text/javascript" src="../../../library/dynarch_calendar.js"></script>
 <?php include_once("{$GLOBALS['srcdir']}/dynarch_calendar_en.inc.php"); ?>
 <script type="text/javascript" src="../../../library/dynarch_calendar_setup.js"></script>
-
 <script type="text/javascript" src="../../../library/js/jquery.1.3.2.js"></script>
 <script type="text/javascript" src="../../../library/js/common.js"></script>
-
 <script type="text/javascript" src="../../../library/js/fancybox/jquery.fancybox-1.2.6.js"></script>
+<?php include_once("{$GLOBALS['srcdir']}/options.js.php"); ?>
+
 <link rel="stylesheet" type="text/css" href="../../../library/js/fancybox/jquery.fancybox-1.2.6.css" media="screen" />
 
 <script type="text/javascript">
@@ -123,7 +125,10 @@ function auto_populate_employer_address<?php echo $i ?>(){
     f.form_i<?php echo $i?>subscriber_country.value=f.form_country_code.value;
   f.i<?php echo $i?>subscriber_phone.value=f.form_phone_home.value;
   f.i<?php echo $i?>subscriber_DOB.value=f.form_DOB.value;
-  f.i<?php echo $i?>subscriber_ss.value=f.form_ss.value;
+  if(typeof f.form_ss!="undefined")
+    {
+        f.i<?php echo $i?>subscriber_ss.value=f.form_ss.value;  
+    }
   f.form_i<?php echo $i?>subscriber_sex.value = f.form_sex.value;
   f.i<?php echo $i?>subscriber_employer.value=f.form_em_name.value;
   f.i<?php echo $i?>subscriber_employer_street.value=f.form_em_street.value;
@@ -270,24 +275,31 @@ function validate(f) {
    f[subpfx + 'fname'].value == f.form_fname.value &&
    f[subpfx + 'mname'].value == f.form_mname.value &&
    f[subpfx + 'lname'].value == f.form_lname.value;
-  var samess = f[subpfx + 'ss'].value == f.form_ss.value;
+  var ss_regexp=/[0-9][0-9][0-9]-?[0-9][0-9]-?[0-9][0-9][0-9][0-9]/;
+  var samess=true;
+  var ss_valid=false;
+  if(typeof f.form_ss!="undefined")
+      {
+        samess = f[subpfx + 'ss'].value == f.form_ss.value;
+        ss_valid=ss_regexp.test(f[subpfx + 'ss'].value) && ss_regexp.test(f.form_ss.value);  
+      }
   if (subrelat.options[subrelat.selectedIndex].value == "self") {
    if (!samename) {
-    if (!confirm("<?php xl('Subscriber relationship is self but name is different! Is this really OK?','e'); ?>"))
+    if (!confirm("<?php echo xls('Subscriber relationship is self but name is different! Is this really OK?'); ?>"))
      return false;
    }
-   if (!samess) {
-    alert("<?php xl('Subscriber relationship is self but SS number is different!','e'); ?>");
+   if (!samess && ss_valid) {
+    if(!confirm("<?php echo xls('Subscriber relationship is self but SS number is different!')." ". xls("Is this really OK?"); ?>"))
     return false;
    }
   } // end self
   else {
    if (samename) {
-    if (!confirm("<?php xl('Subscriber relationship is not self but name is the same! Is this really OK?','e'); ?>"))
+    if (!confirm("<?php echo xls('Subscriber relationship is not self but name is the same! Is this really OK?'); ?>"))
      return false;
    }
-   if (samess) {
-    alert("<?php xl('Subscriber relationship is not self but SS number is the same!','e'); ?>");
+   if (samess && ss_valid)  {
+    if(!confirm("<?php echo xls('Subscriber relationship is not self but SS number is the same!') ." ". xls("Is this really OK?"); ?>"))
     return false;
    }
   } // end not self
@@ -307,20 +319,22 @@ function submitme() {
 // Onkeyup handler for policy number.  Allows only A-Z and 0-9.
 function policykeyup(e) {
  var v = e.value.toUpperCase();
+ var filteredString="";
  for (var i = 0; i < v.length; ++i) {
   var c = v.charAt(i);
-  if (c >= '0' && c <= '9') continue;
-  if (c >= 'A' && c <= 'Z') continue;
-  if (c == '*') continue;
-  if (c == '-') continue;
-  if (c == '_') continue;
-  if (c == '(') continue;
-  if (c == ')') continue;
-  if (c == '#') continue;
-  v = v.substring(0, i) + v.substring(i + i);
-  --i;
+  if ((c >= '0' && c <= '9') ||
+     (c >= 'A' && c <= 'Z') ||
+     (c == '*') ||
+     (c == '-') ||
+     (c == '_') ||
+     (c == '(') ||
+     (c == ')') ||
+     (c == '#'))
+     {
+         filteredString+=c;
+     }
  }
- e.value = v;
+ e.value = filteredString;
  return;
 }
 
@@ -421,9 +435,7 @@ $group_seq=0; // this gives the DIV blocks unique IDs
 	</div>
 </div>
 <br>
-  <div class="section-header">
-    <span class="text"><b><?php xl("Insurance", "e" )?></b></span>
-</div>
+
 <div id="DEM" >
 
 
@@ -437,6 +449,9 @@ $group_seq=0; // this gives the DIV blocks unique IDs
 	  $insurance_info[3] = getInsuranceData($pid,"tertiary");
 
 	?>
+     <div class="section-header">
+         <span class="text"><b><?php xl("Insurance", "e" )?></b></span>
+     </div>
 	<div id="INSURANCE" >
 		<ul class="tabNav">
 		<?php
@@ -715,7 +730,7 @@ $group_seq=0; // this gives the DIV blocks unique IDs
 <?php } ?>
 
 <?php if ($GLOBALS['concurrent_layout'] && $set_pid) { ?>
- parent.left_nav.setPatient(<?php echo "'" . addslashes($result['fname']) . " " . addslashes($result['lname']) . "',$pid,'" . addslashes($result['pubpid']) . "','', ' " . xl('DOB') . ": " . oeFormatShortDate($result['DOB_YMD']) . " " . xl('Age') . ": " . getPatientAge($result['DOB_YMD']) . "'"; ?>);
+ parent.left_nav.setPatient(<?php echo "'" . addslashes($result['fname']) . " " . addslashes($result['lname']) . "',$pid,'" . addslashes($result['pubpid']) . "','', ' " . xl('DOB') . ": " . oeFormatShortDate($result['DOB_YMD']) . " " . xl('Age') . ": " . getPatientAgeDisplay($result['DOB_YMD']) . "'"; ?>);
  parent.left_nav.setRadio(window.name, 'dem');
 <?php } ?>
 
@@ -730,5 +745,19 @@ $group_seq=0; // this gives the DIV blocks unique IDs
 <?php include $GLOBALS['fileroot']."/library/options_listadd.inc"; ?>
 
 </body>
+<script language='JavaScript'>
+    // Array of skip conditions for the checkSkipConditions() function.
+    var skipArray = [
+        <?php echo $condition_str; ?>
+    ];
+    checkSkipConditions();
+    $("input").change(function() {
+        checkSkipConditions();
+    });
+    $("select").change(function() {
+        checkSkipConditions();
+    });
+</script>
+
 
 </html>

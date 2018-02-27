@@ -113,9 +113,9 @@ $sqlQuery = "SELECT username, fname, lname FROM users " .
 $ures = sqlStatement($sqlQuery);
 ?>
 
-<?php 
-$get_sdate=$start_date ? $start_date : date("Y-m-d");
-$get_edate=$end_date ? $end_date : date("Y-m-d");
+<?php
+$get_sdate=$start_date ? $start_date : date("Y-m-d H:i:s");
+$get_edate=$end_date ? $end_date : date("Y-m-d H:i:s");
 
 ?>
 
@@ -131,14 +131,14 @@ $sortby = formData('sortby','G') ;
 <tr><td>
 <span class="text"><?php  xl('Start Date','e'); ?>: </span>
 </td><td>
-<input type="text" size="10" name="start_date" id="start_date" value="<?php echo $start_date ? substr($start_date, 0, 10) : date('Y-m-d'); ?>" title="<?php  xl('yyyy-mm-dd Date of service','e'); ?>" onkeyup="datekeyup(this,mypcc)" onblur="dateblur(this,mypcc)" />
-<img src="../pic/show_calendar.gif" align="absbottom" width="24" height="22" id="img_begin_date" border="0" alt="[?]" style="cursor: pointer; cursor: hand" title="<?php  xl('Click here to choose a date','e'); ?>">&nbsp;
+<input type="text" size="18" name="start_date" id="start_date" value="<?php echo $start_date ? $start_date : (date("Y-m-d") . " 00:00:00"); ?>" title="<?php  xl('yyyy-mm-dd H:m Start Date','e'); ?>" onkeyup="datekeyup(this,mypcc,true)" onblur="dateblur(this,mypcc,true)" />
+<img src="../pic/show_calendar.gif" align="absbottom" width="24" height="22" id="img_begin_date" border="0" alt="[?]" style="cursor: pointer; cursor: hand" title="<?php  xl('Click here to choose date time','e'); ?>">&nbsp;
 </td>
 <td>
 <span class="text"><?php  xl('End Date','e'); ?>: </span>
 </td><td>
-<input type="text" size="10" name="end_date" id="end_date" value="<?php echo $end_date ? substr($end_date, 0, 10) : date('Y-m-d'); ?>" title="<?php  xl('yyyy-mm-dd Date of service','e'); ?>" onkeyup="datekeyup(this,mypcc)" onblur="dateblur(this,mypcc)" />
-<img src="../pic/show_calendar.gif" align="absbottom" width="24" height="22" id="img_end_date" border="0" alt="[?]" style="cursor: pointer; cursor: hand" title="<?php  xl('Click here to choose a date','e'); ?>">&nbsp;
+<input type="text" size="18" name="end_date" id="end_date" value="<?php echo $end_date ? $end_date : (date("Y-m-d") . " 23:59:00"); ?>" title="<?php  xl('yyyy-mm-dd H:m End Date','e'); ?>" onkeyup="datekeyup(this,mypcc,true)" onblur="dateblur(this,mypcc,true)" />
+<img src="../pic/show_calendar.gif" align="absbottom" width="24" height="22" id="img_end_date" border="0" alt="[?]" style="cursor: pointer; cursor: hand" title="<?php  xl('Click here to choose date time','e'); ?>">&nbsp;
 </td>
 <!--VicarePlus :: Feature For Generating Log For The Selected Patient --!>
 <td>
@@ -188,7 +188,7 @@ while ($erow = sqlFetchArray($res)) {
 	$j=$j+1;
 }
 $res1 = sqlStatement("select distinct event from  extended_log order by event ASC");
-$j=0;
+// $j=0; // This can't be right!  -- Rod 2013-08-23
 while ($row = sqlFetchArray($res1)) {
          if (!trim($row['event'])) continue;
          $new_event = explode('-', $row['event']);
@@ -234,7 +234,7 @@ else{
   for($k=0;$k<$lcount;$k++) {
   echo " <option value='" .$event_types[$k]. "'";
   if ($event_types[$k] == $type_event && $event_types[$k]!= "") echo " selected";
-  echo ">" . $event_types[$k];
+  echo ">" . preg_replace('/^select$/','Query',$event_types[$k]); // Convert select to Query for MU2 requirement
   echo "</option>\n";
 }
 echo "</select>\n";
@@ -306,18 +306,31 @@ if ($ret = getEvents(array('sdate' => $get_sdate,'edate' => $get_edate, 'user' =
     //translate comments
     $patterns = array ('/^success/','/^failure/','/ encounter/');
 	$replace = array ( xl('success'), xl('failure'), xl('encounter','',' '));
-	$trans_comments = preg_replace($patterns, $replace, $iter["comments"]);
+	
+	$log_id = $iter['id'];
+	$commentEncrStatus = "No";
+	$logEncryptData = logCommentEncryptData($log_id);
+	if(count($logEncryptData) > 0){
+		$commentEncrStatus = $logEncryptData['encrypt'];
+	}
+	
+	//July 1, 2014: Ensoftek: Decrypt comment data if encrypted
+	if($commentEncrStatus == "Yes"){
+		$trans_comments = preg_replace($patterns, $replace, aes256Decrypt($iter["comments"]));
+	}else{
+		$trans_comments = preg_replace($patterns, $replace, $iter["comments"]);
+	}
 	
 ?>
  <TR class="oneresult">
   <TD class="text"><?php echo oeFormatShortDate(substr($iter["date"], 0, 10)) . substr($iter["date"], 10) ?></TD>
-  <TD class="text"><?php echo xl($iter["event"])?></TD>
+  <TD class="text"><?php echo preg_replace('/select$/','Query',$iter["event"]); //Convert select term to Query for MU2 requirements ?></TD>
   <TD class="text"><?php echo $iter["user"]?></TD>
   <TD class="text"><?php echo $iter["crt_user"]?></TD>
   <TD class="text"><?php echo $iter["groupname"]?></TD>
   <TD class="text"><?php echo $iter["patient_id"]?></TD>
   <TD class="text"><?php echo $iter["success"]?></TD>
-  <TD class="text"><?php echo $trans_comments?></TD>
+  <TD class="text"><?php echo nl2br(text(preg_replace('/^select/i','Query',$trans_comments))); //Convert select term to Query for MU2 requirements ?></TD>
   <?php  if($check_sum) { ?>
   <TD class="text"><?php echo $iter["checksum"]?></TD>
   <?php } ?>
@@ -387,10 +400,9 @@ $(document).ready(function(){
 
 
 /* required for popup calendar */
-Calendar.setup({inputField:"start_date", ifFormat:"%Y-%m-%d", button:"img_begin_date"});
-Calendar.setup({inputField:"end_date", ifFormat:"%Y-%m-%d", button:"img_end_date"});
+Calendar.setup({inputField:"start_date", ifFormat:"%Y-%m-%d %H:%M:%S", button:"img_begin_date", showsTime:true});
+Calendar.setup({inputField:"end_date", ifFormat:"%Y-%m-%d %H:%M:%S", button:"img_end_date", showsTime:true});
 
 </script>
 
 </html>
-

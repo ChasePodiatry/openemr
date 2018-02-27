@@ -1,10 +1,26 @@
 <?php
-// Copyright (C) 2005-2011 Rod Roark <rod@sunsetsystems.com>
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either version 2
-// of the License, or (at your option) any later version.
+/*
+* 
+* Fee Sheet Program used to create charges, copays and add diagnosis codes to the encounter
+* 
+* Copyright (C) 2005-2015 Rod Roark <rod@sunsetsystems.com>
+* 
+* LICENSE: This program is free software; you can redistribute it and/or 
+* modify it under the terms of the GNU General Public License 
+* as published by the Free Software Foundation; either version 3 
+* of the License, or (at your option) any later version. 
+* This program is distributed in the hope that it will be useful, 
+* but WITHOUT ANY WARRANTY; without even the implied warranty of 
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the 
+* GNU General Public License for more details. 
+* You should have received a copy of the GNU General Public License 
+* along with this program. If not, see <http://opensource.org/licenses/gpl-license.php>;. 
+* 
+* @package OpenEMR 
+* @author Rod Roark <rod@sunsetsystems.com>
+* @author Terry Hill <terry@lillysystems.com>
+* @link http://www.open-emr.org 
+*/
 
 $fake_register_globals=false;
 $sanitize_all_escapes=true;
@@ -18,9 +34,16 @@ require_once("../../drugs/drugs.inc.php");
 require_once("$srcdir/formatting.inc.php");
 require_once("$srcdir/options.inc.php");
 require_once("$srcdir/formdata.inc.php");
+require_once("$srcdir/log.inc");
+
+// For logging checksums set this to true.
+define('CHECKSUM_LOGGING', true);
 
 // Some table cells will not be displayed unless insurance billing is used.
 $usbillstyle = $GLOBALS['ippf_specific'] ? " style='display:none'" : "";
+
+// This may be an error message or warning that pops up when the form is loaded.
+$alertmsg = '';
 
 function alphaCodeType($id) {
   global $code_types;
@@ -76,6 +99,26 @@ function contraceptionClass($code_type, $code) {
   }
   return $contra;
 }
+# gets the provider from the encounter file , or from the logged on user or from the patient file
+function findProvider() {
+  global $encounter, $pid;   
+  $find_provider = sqlQuery("SELECT provider_id FROM form_encounter " .
+        "WHERE pid = ? AND encounter = ? " .
+        "ORDER BY id DESC LIMIT 1", array($pid,$encounter) );
+  $providerid = $find_provider['provider_id'];
+  if($providerid == 0) {
+   $get_authorized = $_SESSION['userauthorized'];
+   if($get_authorized ==1) {
+      $providerid = $_SESSION[authUserID];
+   }
+  }
+  if($providerid == 0) {
+    $find_provider = sqlQuery("SELECT providerID FROM patient_data " .
+		"WHERE pid = ? ", array($pid) );
+    $providerid = $find_provider['providerID'];
+  }  
+  return $providerid;
+}
 
 // This writes a billing line item to the output page.
 //
@@ -85,6 +128,13 @@ function echoLine($lino, $codetype, $code, $modifier, $ndc_info='',
 {
   global $code_types, $ndc_applies, $ndc_uom_choices, $justinit, $pid;
   global $contraception, $usbillstyle, $hasCharges;
+
+  // If using line item billing and user wishes to default to a selected provider, then do so.
+  if($GLOBALS['default_fee_sheet_line_item_provider'] == 1 && $GLOBALS['support_fee_sheet_line_item_provider'] ==1 ) {
+    if ($provider_id == 0) {
+      $provider_id = 0 + findProvider();
+    }
+  }
 
   if ($codetype == 'COPAY') {
     if (!$code_text) $code_text = 'Cash';
@@ -164,10 +214,17 @@ function echoLine($lino, $codetype, $code, $modifier, $ndc_info='',
       echo "  <td class='billcell' align='center'$usbillstyle>" . text($justify) . "</td>\n";
     }
 
-    // Show provider for this line.
-    echo "  <td class='billcell' align='center'>";
-    genProviderSelect('', '-- '.xl("Default").' --', $provider_id, true);
-    echo "</td>\n";
+    // Show provider for this line (if using line item billing).
+    if($GLOBALS['support_fee_sheet_line_item_provider'] ==1) {
+      echo "  <td class='billcell' align='center'>";
+    }
+    else 
+    {
+      echo "  <td class='billcell' align='center' style='display: none'>";
+    }
+      genProviderSelect('', '-- '.xl("Default").' --', $provider_id, true);
+      echo "</td>\n";
+
     if ($code_types[$codetype]['claim'] && !$code_types[$codetype]['diag']) {
       echo "  <td class='billcell' align='center'$usbillstyle>" .
         htmlspecialchars($notecodes, ENT_NOQUOTES) . "</td>\n";
@@ -227,10 +284,17 @@ function echoLine($lino, $codetype, $code, $modifier, $ndc_info='',
       }
     }
 
-    // Provider drop-list for this line.
-    echo "  <td class='billcell' align='center'>";
-    genProviderSelect("bill[$lino][provid]", '-- '.xl("Default").' --', $provider_id);
-    echo "</td>\n";
+    // Show provider for this line (if using line item billing)
+    if($GLOBALS['support_fee_sheet_line_item_provider'] ==1) {
+      echo "  <td class='billcell' align='center'>";
+    }
+    else 
+    {
+      echo "  <td class='billcell' align='center' style='display: none'>";
+    }
+      genProviderSelect("bill[$lino][provid]", '-- '.xl("Default").' --', $provider_id);
+      echo "</td>\n";
+
     if ($code_types[$codetype]['claim'] && !$code_types[$codetype]['diag']) {
       echo "  <td class='billcell' align='center'$usbillstyle><input type='text' name='bill[".attr($lino)."][notecodes]' " .
         "value='" . htmlspecialchars($notecodes, ENT_QUOTES) . "' maxlength='10' size='8' /></td>\n";
@@ -321,6 +385,7 @@ function echoProdLine($lino, $drug_id, $del = FALSE, $units = NULL,
       echo "  <td class='billcell' align='center'$usbillstyle>&nbsp;</td>\n"; // justify
     }
     echo "  <td class='billcell' align='center'>&nbsp;</td>\n";             // provider
+    echo "  <td class='billcell' align='center'$usbillstyle>&nbsp;</td>\n"; // note codes
     echo "  <td class='billcell' align='center'$usbillstyle>&nbsp;</td>\n"; // auth
     echo "  <td class='billcell' align='center'><input type='checkbox'" .   // del
       " disabled /></td>\n";
@@ -343,6 +408,7 @@ function echoProdLine($lino, $drug_id, $del = FALSE, $units = NULL,
       echo "  <td class='billcell'$usbillstyle>&nbsp;</td>\n"; // justify
     }
     echo "  <td class='billcell' align='center'>&nbsp;</td>\n"; // provider
+    echo "  <td class='billcell' align='center'$usbillstyle>&nbsp;</td>\n"; // note codes
     echo "  <td class='billcell' align='center'$usbillstyle>&nbsp;</td>\n"; // auth
     echo "  <td class='billcell' align='center'><input type='checkbox' name='prod[".attr($lino)."][del]' " .
       "value='1'" . ($del ? " checked" : "") . " /></td>\n";
@@ -378,6 +444,30 @@ function genProviderSelect($selname, $toptext, $default=0, $disabled=false) {
   echo "   </select>\n";
 }
 
+// Compute a current checksum of Fee Sheet data from the database.
+//
+function visitChecksum($pid, $encounter, $saved=false) {
+  $rowb = sqlQuery("SELECT BIT_XOR(CRC32(CONCAT_WS(',', " .
+    "id, code, modifier, units, fee, authorized, provider_id, ndc_info, justify, billed" .
+    "))) AS checksum FROM billing WHERE " .
+    "pid = ? AND encounter = ? AND activity = 1",
+    array($pid, $encounter));
+  $rowp = sqlQuery("SELECT BIT_XOR(CRC32(CONCAT_WS(',', " .
+    "sale_id, inventory_id, prescription_id, quantity, fee, sale_date, billed" .
+    "))) AS checksum FROM drug_sales WHERE " .
+    "pid = ? AND encounter = ?",
+    array($pid, $encounter));
+  $ret = intval($rowb['checksum']) ^ intval($rowp['checksum']);
+  if (CHECKSUM_LOGGING) {
+    $comment = "Checksum = '$ret'";
+    $comment .= ", AJAX = " . (empty($_POST['running_as_ajax']) ? "false" : "true");
+    $comment .= ", Save = " . (empty($_POST['bn_save']) ? "false" : "true");
+    $comment .= ", Saved = " . ($saved ? "true" : "false");
+    newEvent("checksum", $_SESSION['authUser'], $_SESSION['authProvider'], 1, $comment, $pid);
+  }
+  return $ret;
+}
+
 // This is just for IPPF, to indicate if the visit includes contraceptive services.
 $contraception = 0;
 
@@ -408,10 +498,23 @@ $visit_row = sqlQuery("SELECT fe.date, opc.pc_catname " .
   "WHERE fe.pid = ? AND fe.encounter = ? LIMIT 1", array($pid,$encounter) );
 $visit_date = substr($visit_row['date'], 0, 10);
 
+$current_checksum = visitChecksum($pid, $encounter);
+// It's important to look for a checksum mismatch even if we're just refreshing
+// the display, otherwise the error goes undetected on a refresh-then-save.
+if (isset($_POST['form_checksum'])) {
+  if ($_POST['form_checksum'] != $current_checksum) {
+    $alertmsg = xl('Someone else has just changed this visit. Please cancel this page and try again.');
+    if (CHECKSUM_LOGGING) {
+      $comment = "CHECKSUM ERROR, expecting '{$_POST['form_checksum']}'";
+      newEvent("checksum", $_SESSION['authUser'], $_SESSION['authProvider'], 1, $comment, $pid);
+    }
+  }
+}
+
 // If Save or Save-and-Close was clicked, save the new and modified billing
 // lines; then if no error, redirect to $returnurl.
 //
-if ($_POST['bn_save'] || $_POST['bn_save_close']) {
+if (!$alertmsg && ($_POST['bn_save'] || $_POST['bn_save_close'])) {
   $main_provid = 0 + $_POST['ProviderID'];
   $main_supid  = 0 + $_POST['SupervisorID'];
   if ($main_supid == $main_provid) $main_supid = 0;
@@ -477,6 +580,16 @@ if ($_POST['bn_save'] || $_POST['bn_save_close']) {
       continue;
     }
     $justify   = trim($iter['justify']);
+    # Code to create justification for all codes based on first justification
+    if ($GLOBALS['replicate_justification']=='1' ) {
+      if ($justify !='') {
+         $autojustify =  $justify;
+      }
+    }
+    if ( ($GLOBALS['replicate_justification']=='1') && ($justify == '') && check_is_code_type_justify($code_type) ) {
+        $justify =  $autojustify; 
+    }
+
     $notecodes = trim($iter['notecodes']);
     if ($justify) $justify = str_replace(',', ':', $justify) . ':';
     // $auth      = $iter['auth'] ? "1" : "0";
@@ -614,10 +727,22 @@ if ($_POST['bn_save'] || $_POST['bn_save_close']) {
   // also posts to SL).  Currently taxes with insurance claims make no sense,
   // so for now we'll ignore tax computation in the insurance billing logic.
 
-  formHeader("Redirecting....");
-  formJump();
-  formFooter();
-  exit;
+  if ($_POST['running_as_ajax']) {
+    // In the case of running as an AJAX handler, we need to return this same
+    // form with an updated checksum to properly support the invoking logic.
+    // See review/js/fee_sheet_core.js for that logic.
+    $current_checksum = visitChecksum($pid, $encounter, true);
+    // Also remove form data for the newly entered lines so they are not
+    // duplicated from the database.
+    unset($_POST['bill']);
+    unset($_POST['prod']);
+  }
+  else {
+    formHeader("Redirecting....");
+    formJump();
+    formFooter();
+    exit;
+  }
 }
 
 $billresult = getBillingByEncounter($pid, $encounter, "*");
@@ -860,7 +985,7 @@ echo "  <td colspan='" . attr($FEE_SHEET_COLUMNS) . "' align='center' nowrap>\n"
 //
 $numrows = 0;
 if ($_POST['bn_search'] && $_POST['search_term']) {
-  $res = code_set_search($search_type,$_POST['search_term']);
+  $res = main_code_set_search($search_type,$_POST['search_term']);
   if (!empty($res)) {
     $numrows = sqlNumRows($res);
   }
@@ -897,14 +1022,27 @@ echo " </tr>\n";
   </td>
   <td>
    <?php echo xlt('Search'); ?>&nbsp;
+  </td>
+  <td>
 <?php
+  $nofs_code_types = array();
   foreach ($code_types as $key => $value) {
     if (!empty($value['nofs'])) continue;
-    echo "   <input type='radio' name='search_type' value='" . attr($key) . "'";
-    if ($key == $default_search_type) echo " checked";
-    echo " />" . text($key) . "&nbsp;\n";
+    $nofs_code_types[$key] = $value;
+  }
+  $size_select = (count($nofs_code_types) < 5) ? count($nofs_code_types) : 5;
+?>
+  <select name='search_type' size='<?php echo attr($size_select) ?>'>
+<?php
+  foreach ($nofs_code_types as $key => $value) {
+    echo "   <option value='" . attr($key) . "'";
+    if ($key == $search_type) echo " selected";
+    echo " />" . xlt($value['label']) . "</option>";
   }
 ?>
+  </select>
+  </td>
+  <td>
    <?php echo xlt('for'); ?>&nbsp;
   </td>
   <td>
@@ -934,7 +1072,15 @@ echo " </tr>\n";
 <?php if (justifiers_are_used()) { ?>
   <td class='billcell' align='center'<?php echo $usbillstyle; ?>><b><?php echo xlt('Justify');?></b></td>
 <?php } ?>
-  <td class='billcell' align='center'><b><?php echo xlt('Provider');?></b></td>
+
+  <?php // Show provider (only if using line item billing) ?>
+  <?php if($GLOBALS['support_fee_sheet_line_item_provider'] ==1) { ?>
+    <td class='billcell' align='center'>
+  <?php } else { ?>
+    <td class='billcell' align='center' style='display: none'>
+  <?php } ?>
+  <b><?php echo xlt('Provider');?></b></td>
+
   <td class='billcell' align='center'<?php echo $usbillstyle; ?>><b><?php echo xlt('Note Codes');?></b></td>
   <td class='billcell' align='center'<?php echo $usbillstyle; ?>><b><?php echo xlt('Auth');?></b></td>
   <td class='billcell' align='center'><b><?php echo xlt('Delete');?></b></td>
@@ -1124,7 +1270,7 @@ if ($_POST['newcodes']) {
 $tmp = sqlQuery("SELECT provider_id, supervisor_id FROM form_encounter " .
   "WHERE pid = ? AND encounter = ? " .
   "ORDER BY id DESC LIMIT 1", array($pid,$encounter) );
-$encounter_provid = 0 + $tmp['provider_id'];
+$encounter_provid = 0 + findProvider();
 $encounter_supid  = 0 + $tmp['supervisor_id'];
 ?>
 </table>
@@ -1221,12 +1367,15 @@ if (true) {
 <input type='submit' name='bn_save' value='<?php echo xla('Save');?>' />
 &nbsp;
 <?php if (!$hasCharges) { ?>
-<input type='submit' name='bn_save_close' value='<?php echo xla('Save and Close');?>' />
+<input type='submit' name='bn_save_close' value='<?php echo xla('Mark as Billed');?>' />
 &nbsp;
 <?php } ?>
 <input type='submit' name='bn_refresh' value='<?php echo xla('Refresh');?>'>
 &nbsp;
 <?php } ?>
+
+<input type='hidden' name='form_checksum' value='<?php echo $current_checksum; ?>' />
+<input type='hidden' name='form_alertmsg' value='<?php echo attr($alertmsg); ?>' />
 
 <input type='button' value='<?php echo xla('Cancel');?>'
  onclick="top.restoreSession();location='<?php echo "$rootdir/patient_file/encounter/$returnurl" ?>'" />
@@ -1241,14 +1390,14 @@ if (true) {
 </center>
 
 </form>
-
-<?php
-// TBD: If $alertmsg, display it with a JavaScript alert().
-?>
-
 <script language='JavaScript'>
-<?php echo $justinit; ?>
+<?php
+echo $justinit;
+if ($alertmsg) {
+  echo "alert('" . addslashes($alertmsg) . "');\n";
+}
+?>
 </script>
-
 </body>
 </html>
+<?php require_once("review/initialize_review.php"); ?>

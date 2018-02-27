@@ -18,11 +18,13 @@
     //STOP FAKE REGISTER GLOBALS
     $sanitize_all_escapes=true;
 
+    //For redirect if the site on session does not match
+    $landingpage = "index.php?site=".$_GET['site'];
+
     //includes
     require_once('../interface/globals.php');
-    require_once("$srcdir/sha1.js");
-    // 
 
+    ini_set("error_log",E_ERROR || ~E_NOTICE);
     //exit if portal is turned off
     if ( !(isset($GLOBALS['portal_onsite_enable'])) || !($GLOBALS['portal_onsite_enable']) ) {
       echo htmlspecialchars( xl('Patient Portal is turned off'), ENT_NOQUOTES);
@@ -85,12 +87,12 @@
         $hiddenLanguageField = "<input type='hidden' name='languageChoice' value='".htmlspecialchars($defaultLangID,ENT_QUOTES)."' />\n";
       }
     }
-
+    
 ?>
 
 <html>
 <head>
-    <title><?php echo htmlspecialchars( xl('Patient Portal Login'), ENT_NOQUOTES); ?></title>
+    <title><?php echo xlt('Patient Portal Login'); ?></title>
 
     <script type="text/javascript" src="../library/js/jquery-1.5.js"></script>
     <script type="text/javascript" src="../library/js/jquery.gritter.min.js"></script>
@@ -105,8 +107,6 @@
                 alert ('<?php echo addslashes( xl('Field(s) are missing!') ); ?>');
                 return false;
             }
-            document.getElementById('code').value = SHA1(document.getElementById('pass').value);
-            document.getElementById('pass').value='';
         }
 	function validate() {
             var pass=true;            
@@ -134,13 +134,8 @@
                 alert ('<?php echo addslashes( xl('The new password can not be the same as the current password.') ); ?>');
                 return false;
             }
-            document.getElementById('code').value = SHA1(document.getElementById('pass').value);
-            document.getElementById('pass').value='';
-            document.getElementById('code_new').value = SHA1(document.getElementById('pass_new').value);
-            document.getElementById('pass_new').value='';
-            document.getElementById('code_new_confirm').value = SHA1(document.getElementById('pass_new_confirm').value);
-            document.getElementById('pass_new_confirm').value='';
         }
+
         function validate_new_pass() {
             var pass=true;
             if (document.getElementById('uname').value == "") {
@@ -179,34 +174,33 @@
 <br><br>
     <center>
 
-    <?php if (isset($_SESSION['password_update'])) { ?>
+    <?php if (isset($_SESSION['password_update'])||isset($_GET['password_update'])) { 
+        $_SESSION['password_update']=1;
+        ?>
       <div id="wrapper" class="centerwrapper">
         <h2 class="title"><?php echo htmlspecialchars( xl('Please Enter a New Password'), ENT_NOQUOTES); ?></h2>
         <form action="get_patient_info.php" method="POST" onsubmit="return process_new_pass()" >
             <table>
                 <tr>
                     <td class="algnRight"><?php echo htmlspecialchars( xl('User Name'), ENT_NOQUOTES); ?></td>
-                    <td><input name="uname" id="uname" type="text" /></td>
+                    <td><input name="uname" id="uname" type="text" autocomplete="off" value="<?php echo attr($_SESSION['portal_username']); ?>"/></td>
                 </tr>
                 <tr>
                     <td class="algnRight"><?php echo htmlspecialchars( xl('Current Password'), ENT_NOQUOTES);?></>
                     <td>
-                        <input name="pass" id="pass" type="password" />
-                        <input type="hidden" id="code" name="code" type="hidden" />
+                        <input name="pass" id="pass" type="password" autocomplete="off" />
                     </td>
                 </tr>
                 <tr>
                     <td class="algnRight"><?php echo htmlspecialchars( xl('New Password'), ENT_NOQUOTES);?></>
                     <td>
                         <input name="pass_new" id="pass_new" type="password" />
-                        <input type="hidden" id="code_new" name="code_new" type="hidden" />
                     </td>
                 </tr>
                 <tr>
                     <td class="algnRight"><?php echo htmlspecialchars( xl('Confirm New Password'), ENT_NOQUOTES);?></>
                     <td>
                         <input name="pass_new_confirm" id="pass_new_confirm" type="password" />
-                        <input type="hidden" id="code_new_confirm" name="code_new_confirm" type="hidden" />
                     </td>
                 </tr>
                 <tr>
@@ -224,13 +218,12 @@
 	    <table>
 		<tr>
 		    <td class="algnRight"><?php echo htmlspecialchars( xl('User Name'), ENT_NOQUOTES); ?></td>
-		    <td><input name="uname" id="uname" type="text" /></td>
+		    <td><input name="uname" id="uname" type="text" autocomplete="off" /></td>
 		</tr>
 		<tr>
 		    <td class="algnRight"><?php echo htmlspecialchars( xl('Password'), ENT_NOQUOTES);?></>
 		    <td>
-			<input name="pass" id="pass" type="password" />
-			<input type="hidden" id="code" name="code" type="hidden" />
+			<input name="pass" id="pass" type="password" autocomplete="off" />
 		    </td>
 		</tr>
 

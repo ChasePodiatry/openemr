@@ -1,6 +1,6 @@
 <?php
 //------------Forms generated from formsWiz
-include_once("../../globals.php");
+include_once(dirname(__FILE__).'/../../globals.php');
 include_once($GLOBALS["srcdir"]."/api.inc");
 
 function ros_report( $pid, $encounter, $cols, $id) {
@@ -10,7 +10,7 @@ function ros_report( $pid, $encounter, $cols, $id) {
     $data = formFetch("form_ros", $id);
 
     if ($data) {
-        print "<div id='form_ros_values' style='border: 1px solid black;'><table><tr>";
+        print "<div id='form_ros_values'><table class='report_results'><tr>";
     
         foreach($data as $key => $value) {
             if ($key == "id" || $key == "pid" || $key == "user" || $key == "groupname" || $key == "activity" ||

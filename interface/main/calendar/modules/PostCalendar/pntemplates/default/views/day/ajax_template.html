@@ -43,11 +43,11 @@ $timeslotHeightUnit="px";
                 }
         }
     [-/php-]
-   ,'_blank', 575, 375);
+   ,'_blank', 775, 375);
  }
 
  function oldEvt(eventdate, eventid, pccattype) {
-  dlgopen('add_edit_event.php?date='+eventdate+'&eid=' + eventid+'&prov=' + pccattype, '_blank', 575, 375);
+  dlgopen('add_edit_event.php?date='+eventdate+'&eid=' + eventid+'&prov=' + pccattype, '_blank', 775, 375);
  }
 
  function goPid(pid) {
@@ -172,7 +172,7 @@ echo dateformat (strtotime($atmp[0]),true);
 
 <div id="viewPicker">
 [-php-]
-echo "   <a href='#' type='button' id='printview' title='" .xl ("Print View"). "' class='css_button'/><span>".xl("Print")."</span></a>\n";
+echo "   <a href='#' type='button' id='printview' title='" .xl ("Print View"). "' class='css_button'/><span>" . xlt("View Printable Version") . "</span></a>\n";
 echo "   <a href='#' type='button' value='" .xl ("Refresh"). "' onclick='javascript:refreshme()' class='css_button'/><span>".xl("Refresh")."</span></a>\n";
 echo "   <a href='#' type='button' id='dayview' title='" .htmlspecialchars( xl('Day View'), ENT_QUOTES). "' class='css_button'/><span>".htmlspecialchars( xl('Day'), ENT_QUOTES)."</span></a>\n";
 echo "   <a href='#' type='button' id='weekview' title='" .htmlspecialchars( xl('Week View'), ENT_QUOTES). "' class='css_button'/><span>".htmlspecialchars( xl('Week'), ENT_QUOTES)."</span></a>\n";
@@ -280,7 +280,11 @@ while ($currdate <= $enddate) {
     if (date('w', $currdate) == $DOWlist[6]) echo "</tr>\n";
 
     // time correction = plus 1000 seconds, for some unknown reason
-    $currdate += (60*60*24)+1000;
+    //$currdate += (60*60*24)+1000;
+
+    ////////
+    $currdate = strtotime("+1 day", $currdate);
+    ////////
 }
 [-/php-]
 </table>
@@ -427,10 +431,12 @@ foreach ($providers as $provider) {
 
             $events_in_timeslot = array();
             foreach ($events as $e1) {
-                // ignore IN and OUT events
-                if (($e1['catid'] == 2) || ($e1['catid'] == 3)) { continue; }
-                // skip events without an ID (why they are in the loop, I have no idea)
+                // ignore IN event
+                if (($e1['catid'] == 2)) { continue; }
+				
+				// skip events without an ID (why they are in the loop, I have no idea)
                 if ($e1['eid'] == "") { continue; }
+
                 // skip events for other providers
                 if ($providerid != $e1['aid']) { continue; }
             
@@ -455,8 +461,14 @@ foreach ($providers as $provider) {
                    || (($e1End > $slotstartmins) && ($e1End <= $slotendmins)) // end-in
                    || (($e1Start < $slotstartmins) && ($e1End > $slotendmins))) // span
                 {
-                    array_push($events_in_timeslot, $e1['eid']);
+					array_push($events_in_timeslot, $e1['eid']);
+					if($e1['catid'] == 3)
+					{
+						array_pop($events_in_timeslot);
+						array_unshift($events_in_timeslot, $e1['eid']);
+					}
                 }
+
             }
             $leftpos = 0;
             $width = 100 / count($events_in_timeslot);
@@ -465,13 +477,23 @@ foreach ($providers as $provider) {
             foreach ($events_in_timeslot as $eid) {
                 // set the width if not already set or if the current width is smaller
                 // than was was previously set
-                if (! isset($eventPositions[$eid]->width)) { $eventPositions[$eid]->width = $width; }
-                else if ($eventPositions[$eid]->width > $width) { $eventPositions[$eid]->width = $width; }
+				if (!isset($eventPositions[$eid]->width))
+				{
+					$eventPositions[$eid]->width = $width;
+				} else if ($eventPositions[$eid]->width > $width) 
+				{
+					$eventPositions[$eid]->width = $width;
+				}
                
                 // set the left position if not already set or if the current left is
                 // greater than what was previously set
-                if (! isset($eventPositions[$eid]->leftpos)) { $eventPositions[$eid]->leftpos = $leftpos; }
-                else if ($eventPositions[$eid]->leftpos < $leftpos) { $eventPositions[$eid]->leftpos = $leftpos; }
+				if (!isset($eventPositions[$eid]->leftpos))
+				{
+					$eventPositions[$eid]->leftpos = $leftpos;
+				} else if ($eventPositions[$eid]->leftpos < $leftpos) 
+				{
+					$eventPositions[$eid]->leftpos = $leftpos;
+				}
 
                 // increment the leftpos by the width
                 $leftpos += $width;
@@ -577,6 +599,11 @@ foreach ($providers as $provider) {
             $eEndInterval = $eMinDiff / $interval;
             // times the interval height
             $eHeight = $eEndInterval * $timeslotHeightVal;
+            if($event['catid']==3)
+            {
+                // An "OUT" that is "zero duration" still needs height so we can click it.
+                $eHeight = $eEndInterval==0 ? $timeslotHeightVal : $eHeight ;
+            }
             $evtHeight = $eHeight.$timeslotHeightUnit;
 
             // determine the DIV width based on any overlapping events
@@ -628,15 +655,15 @@ foreach ($providers as $provider) {
                 if ($comment) $atitle .= " $comment";
                 $divTitle .= "\n[".$atitle ."]";
                 $content .= $catname;
-                if ($event['recurrtype'] == 1) $content .= "<img src='$TPL_IMAGE_PATH/repeating8.png' border='0' style='margin:0px 2px 0px 2px;' title='".htmlspecialchars(xl("Repeating event"),ENT_QUOTES)."' alt='".htmlspecialchars(xl("Repeating event"),ENT_QUOTES)."'>";
+                if ($event['recurrtype'] > 0) $content .= "<img src='{$this->_tpl_vars[TPL_IMAGE_PATH]}/repeating8.png' border='0' style='margin:0px 2px 0px 2px;' title='".htmlspecialchars(xl("Repeating event"),ENT_QUOTES)."' alt='".htmlspecialchars(xl("Repeating event"),ENT_QUOTES)."'>";
                 if ($comment) $content .= " $comment";
             }
             else {
                 // some sort of patient appointment
                 $divTitle .= "\r\n[".$catname.' '.htmlspecialchars($comment, ENT_QUOTES) ."]".htmlspecialchars($fname, ENT_QUOTES)." ".htmlspecialchars($lname, ENT_QUOTES);
                 $content .= "<span class='appointment'>";
-                $content .= $dispstarth . ':' . $startm;
-                if ($event['recurrtype'] == 1) $content .= "<img src='$TPL_IMAGE_PATH/repeating8.png' border='0' style='margin:0px 2px 0px 2px;' title='".htmlspecialchars(xl("Repeating event"),ENT_QUOTES)."' alt='".htmlspecialchars(xl("Repeating event"),ENT_QUOTES)."'>";
+                $content .= create_event_time_anchor($dispstarth.":".$startm);
+                if ($event['recurrtype'] > 0) $content .= "<img src='{$this->_tpl_vars[TPL_IMAGE_PATH]}/repeating8.png' border='0' style='margin:0px 2px 0px 2px;' title='".htmlspecialchars(xl("Repeating event"),ENT_QUOTES)."' alt='".htmlspecialchars(xl("Repeating event"),ENT_QUOTES)."'>";
                 // $content .= htmlspecialchars($event['apptstatus']);
                 $content .= '&nbsp;'.htmlspecialchars($event['apptstatus']);
                 if ($patientid) {
@@ -644,7 +671,7 @@ foreach ($providers as $provider) {
                     $link_title .= xl('Age') . ": ".$patient_age."\n" . xl('DOB') . ": ".$patient_dob.htmlspecialchars($comment, ENT_QUOTES)."\n";
                     $link_title .= "(" . xl('Click to view') . ")";
                     $content .= "<a href='javascript:goPid($patientid)' title='$link_title'>";
-                    $content .= "<img src='$TPL_IMAGE_PATH/user-green.gif' border='0' title='$link_title' alt='View Patient' />";
+                    $content .= "<img src='{$this->_tpl_vars[TPL_IMAGE_PATH]}/user-green.gif' border='0' title='$link_title' alt='View Patient' />";
                     if ($catid == 1) $content .= "<strike>";
                     $content .= htmlspecialchars($lname);
                     if ($GLOBALS['calendar_appt_style'] != 1) {
@@ -673,11 +700,10 @@ foreach ($providers as $provider) {
           // the normal DIV so it doesn't overlap another event DIV and include the time
           if ($event['catid'] == 2) {
               $inTop = ($eStartPos - $timeslotHeightVal).$timeslotHeightUnit;
-              echo "<div class='".$evtClass." event' style='top:".$inTop.
+              echo "<div class='".$evtClass." event in_start' style='top:".$inTop.
                   "; height:".$timeslotHeightVal.$timeslotHeightUnit.
                   "; $divWidth".
                   "; $divLeft".
-                  "; background:transparent".
                   "; border: none".
                   "' title='".$divTitle."'".
                   " id='".$eventdate."-".$eventid."-".$pccattype."'".
@@ -686,10 +712,12 @@ foreach ($providers as $provider) {
               echo $content;
               echo "</div>\n";
           }
-  
+
           // output the DIV and content
+          // For "OUT" events, applying the background color in CSS.
+          $background_string= ($event['catid'] == 3) ? "" : "; background-color:".$color;
           echo "<div class='".$evtClass." event' style='top:".$evtTop."; height:".$evtHeight.
-              "; background-color:".$color.
+              $background_string.
               "; $divWidth".
               "; $divLeft".
               "' title='".$divTitle."'".
@@ -702,11 +730,10 @@ foreach ($providers as $provider) {
        elseif($_SESSION['pc_facility'] == $row['id']){
            if ($event['catid'] == 2) {
                $inTop = ($eStartPos - $timeslotHeightVal).$timeslotHeightUnit;
-               echo "<div class='".$evtClass." event' style='top:".$inTop.
+               echo "<div class='".$evtClass." event in_start' style='top:".$inTop.
                    "; height:".$timeslotHeightVal.$timeslotHeightUnit.
                    "; $divWidth".
                    "; $divLeft".
-                   "; background:transparent".
                    "; border: none".
                    "' title='".$divTitle."'".
                    " id='".$eventdate."-".$eventid."-".$pccattype."'".
@@ -717,8 +744,10 @@ foreach ($providers as $provider) {
            }
    
            // output the DIV and content
-           echo "<div class='".$evtClass." event' style='top:".$evtTop."; height:".$evtHeight.
-               "; background-color:".$event["catcolor"].
+           // For "OUT" events, applying the background color in CSS.
+          $background_string= ($event['catid'] == 3) ? "" : "; background-color:".$event["catcolor"];
+          echo "<div class='".$evtClass." event' style='top:".$evtTop."; height:".$evtHeight.
+               $background_string.
                "; $divWidth".
                "; $divLeft".
                "' title='".$divTitle."'".
@@ -732,7 +761,7 @@ foreach ($providers as $provider) {
 
            if ($event['catid'] == 2) {
                $inTop = ($eStartPos - $timeslotHeightVal).$timeslotHeightUnit;
-               echo "<div class='".$evtClass." event' style='top:".$inTop.
+               echo "<div class='".$evtClass." event in_start' style='top:".$inTop.
                    "; height:".$timeslotHeightVal.$timeslotHeightUnit.
                    "; $divWidth".
                    "; $divLeft".
@@ -745,7 +774,7 @@ foreach ($providers as $provider) {
                echo $content;
                echo "</div>\n";
            }
-   
+
            // output the DIV and content
            echo "<div class='".$evtClass." event' style='top:".$evtTop."; height:".$evtHeight.
                "; background-color:#DDDDDD".

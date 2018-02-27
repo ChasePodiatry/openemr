@@ -60,7 +60,13 @@ if (!empty($_POST['form_submit'])) {
     upgradeFromSqlFile('ippf_upgrade.sql');
   }
 
+  if ( (!empty($v_realpatch)) && ($v_realpatch != "") && ($v_realpatch > 0) ) {
+    // This release contains a patch file, so process it.
+    upgradeFromSqlFile('patch.sql');
+  }
+
   flush();
+
   echo "<font color='green'>Updating global configuration defaults...</font><br />\n";
   require_once("library/globals.inc.php");
   foreach ($GLOBALS_METADATA as $grpname => $grparr) {
@@ -76,11 +82,21 @@ if (!empty($_POST['form_submit'])) {
     }
   }
 
+  echo "<font color='green'>Updating Access Controls...</font><br />\n";
+  require("acl_upgrade.php");
+  echo "<br />\n";
+
   echo "<font color='green'>Updating version indicators...</font><br />\n";
   sqlStatement("UPDATE version SET v_major = '$v_major', v_minor = '$v_minor', " .
     "v_patch = '$v_patch', v_tag = '$v_tag', v_database = '$v_database'");
 
-  echo "<p><font color='green'>Database upgrade finished.</font></p>\n";
+  if ( (!empty($v_realpatch)) && ($v_realpatch != "") && ($v_realpatch > 0) ) {
+    // This release contains a patch file, so update patch indicator.
+    echo "<font color='green'>Patch was also installed, so update version patch indicator...</font><br />\n";
+    sqlStatement("UPDATE version SET v_realpatch = '$v_realpatch'");
+  }
+
+  echo "<p><font color='green'>Database and Access Control upgrade finished.</font></p>\n";
   echo "</body></html>\n";
   exit();
 }
@@ -93,8 +109,8 @@ if (!empty($_POST['form_submit'])) {
 <?php
 foreach ($versions as $version => $filename) {
   echo " <option value='$version'";
-  // Defaulting to most recent version, which is now 4.1.0.
-  if ($version === '4.1.0') echo " selected";
+  // Defaulting to most recent version, which is now 4.2.1.
+  if ($version === '4.2.1') echo " selected";
   echo ">$version</option>\n";
 }
 ?>

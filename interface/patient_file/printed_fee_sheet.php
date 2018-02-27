@@ -98,10 +98,6 @@ else if ($form_fill == 1)
     array_push($pid_list,''); // empty element for blank form 
 }
 
-// make sure to clean up the session 
-// else we'll build off of trash in the combo-drop down for a single patient later
-unset($_SESSION['pidList']);
-
 // This file is optional. You can create it to customize how the printed
 // fee sheet looks, otherwise you'll get a mirror of your actual fee sheet.
 //
@@ -146,7 +142,7 @@ if (empty($SBCODES)) {
     $pres = sqlStatement("SELECT option_id, title FROM list_options " .
             "WHERE list_id = 'superbill' ORDER BY seq");
     while ($prow = sqlFetchArray($pres)) {
-        $SBCODES[] = '*G|' . $prow['title'];
+        $SBCODES[] = '*G|' . xl_list_label($prow['title']);
         $res = sqlStatement("SELECT code_type, code, code_text FROM codes " .
                 "WHERE superbill = '" . $prow['option_id'] . "' AND active = 1 " .
                 "ORDER BY code_text");
@@ -283,15 +279,20 @@ height: ${page_height}pt;
 </style>";
 
 $html .= "<title>" . htmlspecialchars($frow['name']) . "</title>
+<script type='text/javascript' src='../../library/js/jquery-1.2.2.min.js'></script>
 <script type=\"text/javascript\" src=\"../../library/dialog.js\"></script>
 <script language=\"JavaScript\">";
 
 $html .= "
+$(document).ready(function() {
+ var win = top.printLogSetup ? top : opener.top;
+ win.printLogSetup(document.getElementById('printbutton'));
+});
+
 // Process click on Print button.
-function printme() {
-var divstyle = document.getElementById('hideonprint').style;
-divstyle.display = 'none';
-window.print();
+function printlog_before_print() {
+ var divstyle = document.getElementById('hideonprint').style;
+ divstyle.display = 'none';
 }
 
 </script>
@@ -546,8 +547,8 @@ $html .= "<div id='hideonprint'>
 <p>
 <input type='button' value='";
 
-$html .= xl('Print', 'r');
-$html .="' onclick='printme()' /> 
+$html .= xla('Print');
+$html .="' id='printbutton' /> 
 </div>";
 }
 

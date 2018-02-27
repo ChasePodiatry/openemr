@@ -440,7 +440,7 @@ class existingpatient {
             //D series for patient.
             case 'D1':
                     $query = "SELECT forms.encounter, forms.form_id, forms.id, forms.form_name, forms.formdir,forms.date AS fdate,
-                    form_encounter.date ,form_encounter.reason FROM forms LEFT OUTER JOIN form_encounter ON  forms.pid=form_encounter.pid
+                    form_encounter.date ,form_encounter.reason FROM forms LEFT OUTER JOIN form_encounter ON  forms.pid=form_encounter.pid AND forms.`form_id` = form_encounter.`id`  
                     WHERE forms.pid = ? AND forms.deleted=0 AND forms.formdir<>? GROUP BY id ORDER BY forms.encounter,fdate  ASC";
                     array_unshift($data[1],$pid);
                             return array($query,$data[1]);
@@ -461,6 +461,23 @@ class existingpatient {
                             array_unshift($data[1],$pid);
                             return array($query,$data[1]);
                             break;
+												
+						case 'D5':
+                    $query = " SELECT po.procedure_order_id,po.date_ordered,pt1.procedure_type_id AS order_type_id,pt1.name AS procedure_name,ptrc.name AS result_category_name,
+                               pt2.procedure_type AS result_type,pt2.procedure_type_id AS result_type_id,pt2.name AS result_name,pt2.units AS result_def_units,
+                               pt2.range AS result_def_range,pt2.description AS result_description,lo.title AS units_name,pr.procedure_report_id,pr.date_report,
+                               pr.date_collected,pr.specimen_num,pr.report_status,pr.review_status,ps.procedure_result_id,ps.abnormal,ps.result,ps.range,ps.result_status,
+                               ps.facility,ps.comments FROM procedure_order AS po LEFT JOIN procedure_order_code pc ON pc.procedure_order_id = po.`procedure_order_id`
+                               LEFT JOIN procedure_type AS pt1 ON pt1.lab_id = po.`lab_id` AND pt1.procedure_code = pc.procedure_code LEFT JOIN procedure_type AS ptrc 
+                               ON ptrc.procedure_type_id = pt1.parent AND ptrc.procedure_type LIKE 'grp%' LEFT JOIN procedure_type AS pt2 ON ((ptrc.procedure_type_id IS NULL 
+                               AND (pt2.parent = pt1.procedure_type_id OR pt2.procedure_type_id = pt1.procedure_type_id)) OR (pt2.procedure_type_id IS NOT NULL 
+                               AND pt2.parent = pt1.procedure_type_id )) AND (pt2.procedure_type LIKE 'res%' OR pt2.procedure_type LIKE 'rec%') LEFT JOIN list_options AS lo 
+                               ON list_id = 'proc_unit' AND option_id = pt2.units LEFT JOIN procedure_report AS pr ON pr.procedure_order_id = po.procedure_order_id 
+                               LEFT JOIN procedure_result AS ps ON ps.procedure_report_id = pr.procedure_report_id WHERE po.patient_id = ? 
+                               ORDER BY po.date_ordered,po.procedure_order_id,pr.procedure_report_id,ptrc.seq,ptrc.name,ptrc.procedure_type_id,pt2.seq,pt2.name,
+                               pt2.procedure_type_id ";
+                            return array($query,array($pid));
+                            break;
             
             //G series for form menu inc
             case 'G1':
@@ -470,7 +487,7 @@ class existingpatient {
                         
             case 'G2':
                     $query = "SELECT * FROM documents_legal_master AS dlm WHERE dlm_subcategory <> ? and dlm_effective_date <= now() AND
-                    dlm_effective_date<>? AND dlm_document_id Not IN (SELECT distinct(dld_master_docid) FROM documents_legal_detail WHERE
+                    dlm_effective_date<>? AND dlm_upload_type = '0' AND dlm_document_id Not IN (SELECT distinct(dld_master_docid) FROM documents_legal_detail WHERE
                     dld_id IS NOT NULL AND dld_pid=?)";
                             array_push($data[1],$pid);
                             return array($query,$data[1]);
@@ -501,6 +518,13 @@ class existingpatient {
                             array_push($data[1],$pid);
                             return array($query,$data[1]);
                             break;
+            case 'G6':
+                    $query = "SELECT * FROM documents_legal_master AS dlm LEFT OUTER JOIN documents_legal_detail as dld ON
+                    dlm_document_id=dld_master_docid WHERE dlm_subcategory <> ? and dlm_effective_date <= now() AND dlm_effective_date<>?
+                    AND dld_id IS NOT NULL AND (dld_signed = ? OR dlm_upload_type = '1') AND dld_pid=? ORDER BY dlm_effective_date DESC";
+                            array_push($data[1],$pid);
+                            return array($query,$data[1]);
+                            break;			
                         
             case 'F1':
             //Patient details .

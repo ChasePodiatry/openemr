@@ -15,7 +15,7 @@
  * remember that include paths are calculated relative to the including script, not this file.
  * to lock the path to this script (so if called from different scripts) use the dirname(FILE) variable
 */
-require_once('../../globals.php');
+require_once(dirname(__FILE__).'/../globals.php');
 
 /* For Controller, the class we're extending. */
 require_once ($GLOBALS['srcdir'] . '/classes/Controller.class.php');
@@ -43,8 +43,8 @@ abstract class C_AbstractClickmap extends Controller {
      * @param template_mod
      *  template module name, passed to Controller's initializer.
      */
-    function C_AbstractClickmap($template_mod = "general") {
-    	parent::Controller();
+    function __construct($template_mod = "general") {
+    	parent::__construct();
     	$returnurl = $GLOBALS['concurrent_layout'] ? 'encounter_top.php' : 'patient_encounter.php';
     	$this->template_mod = $template_mod;
     	$this->template_dir = $GLOBALS['fileroot'] . "/interface/clickmap/template/";

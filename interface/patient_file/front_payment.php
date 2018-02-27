@@ -1,5 +1,5 @@
 <?php
-// Copyright (C) 2006-2010 Rod Roark <rod@sunsetsystems.com>
+// Copyright (C) 2006-2015 Rod Roark <rod@sunsetsystems.com>
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -13,6 +13,7 @@ require_once("../globals.php");
 require_once("$srcdir/acl.inc");
 require_once("$srcdir/patient.inc");
 require_once("$srcdir/billing.inc");
+require_once("$srcdir/payment.inc.php");
 require_once("$srcdir/forms.inc");
 require_once("$srcdir/sl_eob.inc.php");
 require_once("$srcdir/invoice_summary.inc.php");
@@ -22,7 +23,6 @@ require_once("$srcdir/options.inc.php");
 require_once("$srcdir/encounter_events.inc.php");
 $pid = $_REQUEST['hidden_patient_code'] > 0 ? $_REQUEST['hidden_patient_code'] : $pid;
 
-$INTEGRATED_AR = $GLOBALS['oer_config']['ws_accounting']['enabled'] === 2;
 ?>
 <html>
 <head>
@@ -53,7 +53,7 @@ $var_index=0;
 function echoLine($iname, $date, $charges, $ptpaid, $inspaid, $duept,$encounter=0,$copay=0,$patcopay=0) {
   global $var_index;
   $var_index++;
-  $balance = bucks($charges - $ptpaid - $inspaid - $copay*-1);
+  $balance = bucks($charges - $ptpaid - $inspaid);
   $balance = (round($duept,2) != 0) ? 0 : $balance;//if balance is due from patient, then insurance balance is displayed as zero
   $encounter = $encounter ? $encounter : '';
   echo " <tr id='tr_".attr($var_index)."' >\n";
@@ -70,38 +70,6 @@ function echoLine($iname, $date, $charges, $ptpaid, $inspaid, $duept,$encounter=
     " value='" .  '' . "' onchange='coloring();calctotal()'  autocomplete='off' " .
     "onkeyup='calctotal()'  style='width:50px'/></td>\n";
   echo " </tr>\n";
-}
-
-// Post a payment to the payments table.
-//
-function frontPayment($patient_id, $encounter, $method, $source, $amount1, $amount2) {
-  global $timestamp;
-  $tmprow = sqlQuery("SELECT date FROM form_encounter WHERE " .
-    "encounter=? and pid=?",
-		array($encounter,$patient_id));
-	//the manipulation is done to insert the amount paid into payments table in correct order to show in front receipts report,
-	//if the payment is for today's encounter it will be shown in the report under today field and otherwise shown as previous
-  $tmprowArray=explode(' ',$tmprow['date']);
-  if(date('Y-m-d')==$tmprowArray[0])
-   {
-    if($amount1==0)
-	 {
-	  $amount1=$amount2;
-	  $amount2=0;
-	 }
-   }
-  else
-   {
-    if($amount2==0)
-	 {
-	  $amount2=$amount1;
-	  $amount1=0;
-	 }
-   }
-  $payid = sqlInsert("INSERT INTO payments ( " .
-    "pid, encounter, dtime, user, method, source, amount1, amount2 " .
-    ") VALUES ( ?, ?, ?, ?, ?, ?, ?, ?)", array($patient_id,$encounter,$timestamp,$_SESSION['authUser'],$method,$source,$amount1,$amount2) );
-  return $payid;
 }
 
 // We use this to put dashes, colons, etc. back into a timestamp.
@@ -147,7 +115,6 @@ $now = time();
 $today = date('Y-m-d', $now);
 $timestamp = date('Y-m-d H:i:s', $now);
 
-if (!$INTEGRATED_AR) slInitialize();
 
 // $patdata = getPatientData($pid, 'fname,lname,pubpid');
 
@@ -185,7 +152,7 @@ if ($_POST['form_save']) {
 			", payment_method = ?",
 			array(0,$form_pid,$_SESSION['authUserID'],0,$form_source,$_REQUEST['form_prepayment'],$NameNew,$form_method));
 	
-		 frontPayment($form_pid, 0, $form_method, $form_source, $_REQUEST['form_prepayment'], 0);//insertion to 'payments' table.
+		 frontPayment($form_pid, 0, $form_method, $form_source, $_REQUEST['form_prepayment'], 0, $timestamp);//insertion to 'payments' table.
 	 }
   
   if ($_POST['form_upay'] && $_REQUEST['radio_type_of_payment']!='pre_payment') {
@@ -232,7 +199,7 @@ if ($_POST['form_save']) {
 				   " VALUES (?,?,?,?,?,0,now(),?,?,?,'PCP')",
 					 array($form_pid,$enc,$Codetype,$Code,$Modifier,$_SESSION['authId'],$session_id,$amount));
 				   
-				 frontPayment($form_pid, $enc, $form_method, $form_source, $amount, 0);//insertion to 'payments' table.
+				 frontPayment($form_pid, $enc, $form_method, $form_source, $amount, 0, $timestamp);//insertion to 'payments' table.
 			 }
 			if($_REQUEST['radio_type_of_payment']=='invoice_balance' || $_REQUEST['radio_type_of_payment']=='cash')
 			 {				//Payment by patient after insurance paid, cash patients similar to do not bill insurance in feesheet.
@@ -261,7 +228,7 @@ if ($_POST['form_save']) {
 
 	//--------------------------------------------------------------------------------------------------------------------
 
-        			frontPayment($form_pid, $enc, $form_method, $form_source, 0, $amount);//insertion to 'payments' table.
+        			frontPayment($form_pid, $enc, $form_method, $form_source, 0, $amount, $timestamp);//insertion to 'payments' table.
 
 	//--------------------------------------------------------------------------------------------------------------------
 
@@ -395,18 +362,23 @@ if ($_POST['form_save'] || $_REQUEST['receipt']) {
 ?>
 
 <title><?php echo xlt('Receipt for Payment'); ?></title>
+<script type="text/javascript" src="<?php echo $GLOBALS['webroot'] ?>/library/js/jquery.js"></script>
 <script type="text/javascript" src="../../library/dialog.js"></script>
 <script language="JavaScript">
 
 <?php require($GLOBALS['srcdir'] . "/restoreSession.php"); ?>
 
- // Process click on Print button.
- function printme() {
+$(document).ready(function() {
+ var win = top.printLogSetup ? top : opener.top;
+ win.printLogSetup(document.getElementById('printbutton'));
+});
+
+ // This is action to take before printing and is called from restoreSession.php.
+ function printlog_before_print() {
   var divstyle = document.getElementById('hideonprint').style;
   divstyle.display = 'none';
-  window.print();
-  // divstyle.display = 'block';
  }
+
  // Process click on Delete button.
  function deleteme() {
   dlgopen('deleter.php?payment=<?php echo $payment_key ?>', '_blank', 500, 450);
@@ -484,7 +456,7 @@ if ($_POST['form_save'] || $_REQUEST['receipt']) {
 
 <div id='hideonprint'>
 <p>
-<input type='button' value='<?php echo xla('Print'); ?>' onclick='printme()' />
+<input type='button' value='<?php echo xla('Print'); ?>' id='printbutton' />
 
 <?php
   $todaysenc = todaysEncounterIf($pid);
@@ -1180,59 +1152,6 @@ function make_insurance()
   }
 
 
-  // Now list previously billed visits.
-
-  if ($INTEGRATED_AR) {
-
- } // end $INTEGRATED_AR
-  else {
-    // Query for all open invoices.
-    $query = "SELECT ar.id, ar.invnumber, ar.amount, ar.paid, " .
-      "ar.intnotes, ar.notes, ar.shipvia, " .
-      "(SELECT SUM(invoice.sellprice * invoice.qty) FROM invoice WHERE " .
-      "invoice.trans_id = ar.id AND invoice.sellprice > 0) AS charges, " .
-      "(SELECT SUM(invoice.sellprice * invoice.qty) FROM invoice WHERE " .
-      "invoice.trans_id = ar.id AND invoice.sellprice < 0) AS adjustments, " .
-      "(SELECT SUM(acc_trans.amount) FROM acc_trans WHERE " .
-      "acc_trans.trans_id = ar.id AND acc_trans.chart_id = ? " .
-      "AND acc_trans.source NOT LIKE 'Ins%') AS ptpayments " .
-      "FROM ar WHERE ar.invnumber LIKE ? AND " .
-      "ar.amount != ar.paid " .
-      "ORDER BY ar.invnumber";
-    $ires = SLQuery($query, array($chart_id_cash,$pid."%") );
-    if ($sl_err) die($sl_err);
-    $num_invoices = SLRowCount($ires);
-
-    for ($ix = 0; $ix < $num_invoices; ++$ix) {
-      $irow = SLGetRow($ires, $ix);
-
-      // Get encounter ID and date of service.
-      list($patient_id, $enc) = explode(".", $irow['invnumber']);
-      $tmp = sqlQuery("SELECT LEFT(date, 10) AS encdate FROM form_encounter " .
-        "WHERE encounter = ?", array($enc) );
-      $svcdate = $tmp['encdate'];
-
-      // Compute $duncount as in sl_eob_search.php to determine if
-      // this invoice is at patient responsibility.
-      $duncount = substr_count(strtolower($irow['intnotes']), "statement sent");
-      if (! $duncount) {
-        $insgot = strtolower($irow['notes']);
-        $inseobs = strtolower($irow['shipvia']);
-        foreach (array('ins1', 'ins2', 'ins3') as $value) {
-          if (strpos($insgot, $value) !== false &&
-              strpos($inseobs, $value) === false)
-            --$duncount;
-        }
-      }
-
-      $inspaid = $irow['paid'] + $irow['ptpayments'] - $irow['adjustments'];
-      $balance = $irow['amount'] - $irow['paid'];
-      $duept  = ($duncount < 0) ? 0 : $balance;
-
-      echoLine("form_bpay[$enc]", $svcdate, $irow['charges'],
-        0 - $irow['ptpayments'], $inspaid, $duept);
-    }
-  } // end not $INTEGRATED_AR
 
   // Continue with display of the data entry form.
 ?>
@@ -1273,6 +1192,5 @@ function make_insurance()
 
 <?php
 }
-if (!$INTEGRATED_AR) SLClose();
 ?>
 </html>

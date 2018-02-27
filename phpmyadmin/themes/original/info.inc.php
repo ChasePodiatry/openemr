@@ -3,8 +3,7 @@
 /**
  * Theme information
  *
- * @version $Id$
- * @package phpMyAdmin-theme
+ * @package    PhpMyAdmin-theme
  * @subpackage Original
  */
 
@@ -13,4 +12,3 @@
  */
 $theme_name = 'Original';
 $theme_full_version = '2.9';
-?>

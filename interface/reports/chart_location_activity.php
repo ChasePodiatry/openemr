@@ -1,5 +1,5 @@
 <?php
-// Copyright (C) 2008-2010 Rod Roark <rod@sunsetsystems.com>
+// Copyright (C) 2008-2015 Rod Roark <rod@sunsetsystems.com>
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -7,6 +7,8 @@
 // of the License, or (at your option) any later version.
 
 // This reports checkins and checkouts for a specified patient's chart.
+$fake_register_globals=false;
+$sanitize_all_escapes=true;
 
 require_once("../globals.php");
 require_once("$srcdir/patient.inc");
@@ -18,7 +20,7 @@ $form_patient_id = trim($_POST['form_patient_id']);
 <html>
 <head>
 <?php html_header_show(); ?>
-<title><?php xl('Chart Location Activity','e'); ?></title>
+<title><?php echo xlt('Chart Location Activity'); ?></title>
 
 <link rel='stylesheet' href='<?php echo $css_header ?>' type='text/css'>
 <style type="text/css">
@@ -50,22 +52,29 @@ $form_patient_id = trim($_POST['form_patient_id']);
 
 <script type="text/javascript" src="../../library/js/jquery.1.3.2.js"></script>
 
+<script language="JavaScript">
+ $(document).ready(function() {
+  var win = top.printLogSetup ? top : opener.top;
+  win.printLogSetup(document.getElementById('printbutton'));
+ });
+</script>
+
 </head>
 
 <body class="body_top">
 
-<span class='title'><?php xl('Report','e'); ?> - <?php xl('Chart Location Activity','e'); ?></span>
+<span class='title'><?php echo xlt('Report'); ?> - <?php echo xlt('Chart Location Activity'); ?></span>
 
 <?php
 $curr_pid = $pid;
 $ptrow = array();
 if (!empty($form_patient_id)) {
   $query = "SELECT pid, pubpid, fname, mname, lname FROM patient_data WHERE " .
-    "pubpid = '$form_patient_id' ORDER BY pid LIMIT 1";
-  $ptrow = sqlQuery($query);
+    "pubpid = ? ORDER BY pid LIMIT 1";
+  $ptrow = sqlQuery($query,array($form_patient_id));
   if (empty($ptrow)) {
     $curr_pid = 0;
-    echo "<font color='red'>" . xl('Chart ID') . " '" . $form_patient_id . "' " . xl('not found!') . "</font><br />&nbsp;<br />";
+    echo "<font color='red'>" . xlt('Chart ID') . " '" . text($form_patient_id) . "' " . xlt('not found!') . "</font><br />&nbsp;<br />";
   }
   else {
     $curr_pid = $ptrow['pid'];
@@ -73,14 +82,14 @@ if (!empty($form_patient_id)) {
 }
 else if (!empty($curr_pid)) {
   $query = "SELECT pid, pubpid, fname, mname, lname FROM patient_data WHERE " .
-    "pid = '$curr_pid'";
-  $ptrow = sqlQuery($query);
+    "pid = ?";
+  $ptrow = sqlQuery($query,array($curr_pid));
   $form_patient_id = $ptrow['pubpid'];
 }
 if (!empty($ptrow)) {
-  echo '<span class="title">' . xl('for','','',' ');
-  echo $ptrow['lname'] . ', ' . $ptrow['fname'] . ' ' . $ptrow['mname'] . ' ';
-  echo "(" . $ptrow['pubpid'] . ")";
+  echo '<span class="title">' . text(xl('for','','',' '));
+  echo text($ptrow['lname']) . ', ' . text($ptrow['fname']) . ' ' . text($ptrow['mname']) . ' ';
+  echo "(" . text($ptrow['pubpid']) . ")";
   echo "</span>\n";
 }
 ?>
@@ -101,11 +110,11 @@ if (!empty($ptrow)) {
 	<table class='text'>
 		<tr>
 			<td class='label'>
-			   <?php xl('Patient ID','e'); ?>:
+			   <?php echo xlt('Patient ID'); ?>:
 			</td>
 			<td>
-			   <input type='text' name='form_patient_id' size='10' maxlength='31' value='<?php echo $form_patient_id ?>'
-				title='<?php xl('Patient ID','e'); ?>' />
+			   <input type='text' name='form_patient_id' size='10' maxlength='31' value='<?php echo attr($form_patient_id) ?>'
+				title='<?php echo xla('Patient ID'); ?>' />
 			</td>
 		</tr>
 	</table>
@@ -120,14 +129,14 @@ if (!empty($ptrow)) {
 				<div style='margin-left:15px'>
 					<a href='#' class='css_button' onclick='$("#form_refresh").attr("value","true"); $("#theform").submit();'>
 					<span>
-						<?php xl('Submit','e'); ?>
+						<?php echo xlt('Submit'); ?>
 					</span>
 					</a>
 
 					<?php if ($_POST['form_refresh'] || !empty($ptrow) ) { ?>
-					<a href='#' class='css_button' onclick='window.print()'>
+            <a href='#' class='css_button' id='printbutton'>
 						<span>
-							<?php xl('Print','e'); ?>
+							<?php echo xlt('Print'); ?>
 						</span>
 					</a>
 					<?php } ?>
@@ -147,8 +156,8 @@ if (!empty($ptrow)) {
 <div id="report_results">
 <table>
  <thead>
-  <th> <?php xl('Time','e'); ?> </th>
-  <th> <?php xl('Destination','e'); ?> </th>
+  <th> <?php echo xlt('Time'); ?> </th>
+  <th> <?php echo xlt('Destination'); ?> </th>
  </thead>
  <tbody>
 <?php
@@ -158,15 +167,15 @@ if (!empty($ptrow)) {
     "u.username, u.fname, u.mname, u.lname " .
     "FROM chart_tracker AS ct " .
     "LEFT OUTER JOIN users AS u ON u.id = ct.ct_userid " .
-    "WHERE ct.ct_pid = '$curr_pid' " .
+    "WHERE ct.ct_pid = ? " .
     "ORDER BY ct.ct_when DESC";
-  $res = sqlStatement($query);
+  $res = sqlStatement($query,array($curr_pid));
 
   while ($row = sqlFetchArray($res)) {
 ?>
  <tr>
   <td>
-   <?php echo oeFormatShortDate(substr($row['ct_when'], 0, 10)) . substr($row['ct_when'], 10); ?>
+   <?php echo text(oeFormatShortDate(substr($row['ct_when'], 0, 10))) . text(substr($row['ct_when'], 10)); ?>
   </td>
   <td>
 <?php
@@ -174,7 +183,7 @@ if (!empty($ptrow)) {
       echo generate_display_field(array('data_type'=>'1','list_id'=>'chartloc'),$row['ct_location']);
     }
     else if (!empty($row['ct_userid'])) {
-      echo $row['lname'] . ', ' . $row['fname'] . ' ' . $row['mname'];
+      echo text($row['lname']) . ', ' . text($row['fname']) . ' ' . text($row['mname']);
     }
 ?>
   </td>
@@ -188,7 +197,7 @@ if (!empty($ptrow)) {
 </div> <!-- end of results -->
 <?php } else { ?>
 <div class='text'>
- 	<?php echo xl('Please input search criteria above, and click Submit to view results.', 'e' ); ?>
+ 	<?php echo xlt('Please input search criteria above, and click Submit to view results.'); ?>
 </div>
 <?php } ?>
 
