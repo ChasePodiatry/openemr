@@ -21,6 +21,7 @@ class File
 {
     public $data; // file handle to a php://temp resource
     public $type; // the mime type of the file
+    public $ppid; // the public patient ID
     public $pid; // patient id
 
     function __construct($filedata, $type)
@@ -48,13 +49,12 @@ class File
 
         exec("zbarimg --raw -q " . $tmpfile, $result, $status);
         if ($status != 0) {
-            echo("zbar status: " . $status . "\n");
             return false;
         }
 
         // pid may have spaces in, will produce an array result, we should concat them with " "
-        $pubpid = implode(" ", $result);
-        $patients = getPatientId($pubpid, "id");
+        $this->ppid = implode(" ", $result);
+        $patients = getPatientId($this->ppid, "id");
         if (sizeof($patients) == 0) {
             return false;
         }
@@ -70,7 +70,6 @@ class File
     {
         $tmpFile = tmpfile();
         $size = fwrite($tmpFile, $this->data);
-        echo "saving document length $size\n";
         $ok = addNewDocument($name, $this->type, stream_get_meta_data($tmpFile)['uri'], "", $size, 0, $this->pid, $cat_id);
         fclose($tmpFile);
         if ($ok === false) {
@@ -179,12 +178,52 @@ foreach ($files as $file) {
 echo "Successes: " . sizeof($success) . "\t Failures: " . sizeof($failure) . "\n";
 
 // produce summary report
-//$mail = new MyMailer();
-//try {
-//    $mail->SetFrom($mime_data['headers']['from']);
-//    $mail->AddAddress($GLOBALS["practice_return_email_path"]);
-//} catch (phpmailerException $e) {
-//}
-//if (sizeof($success) > 0) {
+{
+    $successCount = sizeof($success);
+    $failureCount = sizeof($failure);
+    $body = "This is an automated message from the OpenEMR registration form importer.\n".
+        "A total of ".($successCount+$failureCount)." were processed. $successCount succeeded, $failureCount failed.\n\n";
+
+    if ($successCount > 0 ) {
+        $body .= "Successful forms were located for:\n";
+        foreach ($success as $file) {
+            $body .= $file->pid . "\n";
+        }
+        $body .= "\n";
+    }
+
+    if ($failureCount > 0) {
+        $noPid = 0;
+
+        $body .= "The following errors were encountered:\n";
+        foreach ($failure as $file) {
+            if ($file->pid) {
+                $body .= $file->pid . "\t error saving\n";
+            } else {
+                if ($file->ppid) {
+                    $body .= $file->ppid . "\t not found\n";
+                } else {
+                    $noPid++;
+                }
+            }
+        }
+        if ($noPid > 0) {
+            $body .= "No PID could be found for $noPid files\n";
+        }
+        $body .= "\n";
+    }
+
+    $body .= "Please verify these are the results you are expecting. If they are not, please inform the administrator.\n";
+
+    echo $body;
+
+//    $mail = new MyMailer();
+//    try {
+//        $msg = mailparse_msg_get_part($structure, $structure[0]);
+//        $msg_data = mailparse_msg_get_part_data($msg);
+//        $mail->SetFrom($msg_data['headers']['to']);
+//        $mail->AddAddress($GLOBALS["practice_return_email_path"]);
 //
-//}
+//    } catch (phpmailerException $e) {
+//    }
+}
