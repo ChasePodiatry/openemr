@@ -67,7 +67,7 @@ require_once("../../custom/code_types.inc.php");
 
 $currdecimals = $GLOBALS['currency_decimals'];
 
-$details = empty($_GET['details']) ? 0 : 1;
+$details = isset($_GET['details']) ? $_GET['details'] : 1;
 
 $patient_id = empty($_GET['ptid']) ? $pid : 0 + $_GET['ptid'];
 
@@ -464,14 +464,14 @@ function generate_receipt($patient_id, $encounter=0) {
     // Get other payments.
     $inres = sqlStatement("SELECT " .
       "a.code_type, a.code, a.modifier, a.memo, a.payer_type, a.adj_amount, a.pay_amount, " .
-      "s.payer_id, s.reference, s.check_date, s.deposit_date " .
+      "s.payer_id, s.reference, s.check_date, s.deposit_date, s.payment_method " .
       "FROM ar_activity AS a " .
       "LEFT JOIN ar_session AS s ON s.session_id = a.session_id WHERE " .
       "a.pid = ? AND a.encounter = ? AND " .
       "a.pay_amount != 0 " .
       "ORDER BY s.check_date, a.sequence_no", array($patient_id,$encounter) );
     while ($inrow = sqlFetchArray($inres)) {
-      $payer = empty($inrow['payer_type']) ? 'Pt' : ('Ins' . $inrow['payer_type']);
+      $payer = empty($inrow['payer_type']) ? ('Pt ' . $inrow['payment_method']): ('Ins' . $inrow['payer_type']);
       $charges -= sprintf('%01.2f', $inrow['pay_amount']);
       receiptPaymentLine($svcdate, $inrow['pay_amount'],
         $payer . ' ' . $inrow['reference']);
