@@ -1078,6 +1078,20 @@ $GLOBALS_METADATA = array(
       xl('Optional category name for photo images that can be viewed from the patient summary page.')
     ),
 
+    'patient_registration_form_file_name' => array(
+        xl('Patient Registration Form File Name'),
+        'text',                           // data type
+        'Registration Form',             // default
+        xl('Optional file name for patient registration forms to be saved to.')
+    ),
+
+    'patient_registration_form_category_name' => array(
+        xl('Patient Registration Form Category Name'),
+        'text',                           // data type
+        'Patient Information',             // default
+        xl('Optional category name for patient registration forms to be saved to.')
+    ),
+
     'lab_results_category_name' => array(
       xl('Lab Results Category Name'),
       'text',                           // data type
