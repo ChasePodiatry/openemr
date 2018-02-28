@@ -293,6 +293,7 @@ function genPopupsList($style='') {
 <?php if ($GLOBALS['addr_label_type']) { ?>
 <option value='../patient_file/addr_label.php'><?php xl('Address Label','e'); ?></option>
 <?php } ?>
+<option value='../patient_file/registration_form.php'><?php xl('Registration Form', 'e'); ?></option>
 </select>
 <?php
 }
@@ -397,18 +398,18 @@ function genFindBlock() {
 <script type="text/javascript" src="../../library/dialog.js"></script>
 
 <script language='JavaScript'>
- 
+
  // tajemo work by CB 2012/01/31 12:32:57 PM dated reminders counter
- function getReminderCount(){ 
+ function getReminderCount(){
    top.restoreSession();
    // Send the skip_timeout_reset parameter to not count this as a manual entry in the
    //  timing out mechanism in OpenEMR.
    $.post("<?php echo $GLOBALS['webroot']; ?>/library/ajax/dated_reminders_counter.php",
-     { skip_timeout_reset: "1" }, 
+     { skip_timeout_reset: "1" },
      function(data) {
        $("#reminderCountSpan").html(data);
-    // run updater every 60 seconds 
-     var repeater = setTimeout("getReminderCount()", 60000); 
+    // run updater every 60 seconds
+     var repeater = setTimeout("getReminderCount()", 60000);
    });
    //piggy-back on this repeater to run other background-services
    //this is a silent task manager that returns no output
@@ -425,7 +426,7 @@ function genFindBlock() {
    <?php } ?>
  }) 
  // end of tajemo work dated reminders counter
- 
+
  // Master values for current pid and encounter.
  var active_pid = 0;
  var active_encounter = 0;
@@ -1189,7 +1190,7 @@ if ($GLOBALS['athletic_team']) {
       <?php genMiscLink('RBot','cod','2',xl('Fee Sheet'),'patient_file/encounter/load_form.php?formname=fee_sheet'); ?>
       <?php genMiscLink('RBot','bil','1',xl('Checkout'),'patient_file/pos_checkout.php?framed=1'); ?>
     </ul>
-  </li> 
+  </li>
   <?php } ?>
 	<?php  if (acl_check('menus', 'modle')) {?>
    <li><a class="collapsed" id="modimg" ><span><?php echo xlt('Modules') ?></span></a>
@@ -1348,7 +1349,7 @@ if (!empty($reg)) {
       <?php genMiscLink('RBot','cod','2',xl('Fee Sheet'),'patient_file/encounter/load_form.php?formname=fee_sheet'); ?>
       <?php if ($GLOBALS['use_charges_panel']) genTreeLink('RBot','cod',xl('Charges')); ?>
       <?php genMiscLink('RBot','pay','1',xl('Payment'),'patient_file/front_payment.php'); ?>
-      <?php genMiscLink('RBot','bil','1',xl('Checkout'),'patient_file/pos_checkout.php?framed=1'); ?> 
+      <?php genMiscLink('RBot','bil','1',xl('Checkout'),'patient_file/pos_checkout.php?framed=1'); ?>
       <?php if (! $GLOBALS['simplified_demographics']) genTreeLink('RTop','bil',xl('Billing')); ?>
 	  <?php genTreeLink('RTop','npa',xl('Batch Payments'),false,2);?>
 	  <?php genMiscLink('RTop','eob','0',xl('Posting'), 'billing/sl_eob_search.php'); ?>
@@ -1543,7 +1544,7 @@ if (!empty($reg)) {
 <?php } ?>
 	  <?php  genMiscLink('RTop','rep','0',xl('Eligibility'),'reports/edi_270.php'); ?>
 	  <?php  genMiscLink('RTop','rep','0',xl('Eligibility Response'),'reports/edi_271.php'); ?>
-	  
+
 
           <?php if (!$GLOBALS['disable_chart_tracker']) genMiscLink('RTop','rep','0',xl('Chart Activity'),'reports/chart_location_activity.php'); ?>
           <?php if (!$GLOBALS['disable_chart_tracker']) genMiscLink('RTop','rep','0',xl('Charts Out'),'reports/charts_checked_out.php'); ?>
@@ -1630,7 +1631,7 @@ if (!empty($reg)) {
   </li>
   <li><a class="collapsed" id="misimg" ><span><?php xl('Miscellaneous','e') ?></span></a>
     <ul>
-      <?php genTreeLink('RTop','ped',xl('Patient Education')); ?> 
+      <?php genTreeLink('RTop','ped',xl('Patient Education')); ?>
       <?php genTreeLink('RBot','aun',xl('Authorizations')); ?>
       <?php genTreeLink('RTop','fax',xl('Fax/Scan')); ?>
       <?php genTreeLink('RTop','adb',xl('Addr Book')); ?>
