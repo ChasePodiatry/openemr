@@ -144,7 +144,7 @@ foreach ($structure as $structurepart) {
     $part = mailparse_msg_get_part($mailparse, $structurepart);
     $partdata = mailparse_msg_get_part_data($part);
 
-    if ($partdata['content-disposition'] === 'attachment') {
+    if ($partdata['content-disposition'] === 'attachment' || $partdata['content-disposition'] === "inline") {
 //        foreach ($partdata as $key=>$value) {
 //            echo $key . ": " . $value . "\n";
 //        }
@@ -178,52 +178,72 @@ foreach ($files as $file) {
 echo "Successes: " . sizeof($success) . "\t Failures: " . sizeof($failure) . "\n";
 
 // produce summary report
-{
-    $successCount = sizeof($success);
-    $failureCount = sizeof($failure);
-    $body = "This is an automated message from the OpenEMR registration form importer.\n".
-        "A total of ".($successCount+$failureCount)." were processed. $successCount succeeded, $failureCount failed.\n\n";
+$successCount = sizeof($success);
+$failureCount = sizeof($failure);
 
-    if ($successCount > 0 ) {
-        $body .= "Successful forms were located for:\n";
-        foreach ($success as $file) {
-            $body .= $file->pid . "\n";
-        }
-        $body .= "\n";
+$subject = "[records][registration form] ";
+$subject .= $failureCount ? "Error: $successCount succeeded, $failureCount failed" : "Success: imported $successCount forms";
+
+$body = "This is an automated message from the OpenEMR registration form importer.\n" .
+    "A total of " . ($successCount + $failureCount) . " were processed. $successCount succeeded, $failureCount failed.\n\n";
+
+if ($successCount > 0) {
+    $body .= "Successful forms were located for:\n";
+    foreach ($success as $file) {
+        $body .= $file->pid . "\n";
     }
+    $body .= "\n";
+}
 
-    if ($failureCount > 0) {
-        $noPid = 0;
+if ($failureCount > 0) {
+    $noPid = 0;
 
-        $body .= "The following errors were encountered:\n";
-        foreach ($failure as $file) {
-            if ($file->pid) {
-                $body .= $file->pid . "\t error saving\n";
+    $body .= "The following errors were encountered:\n";
+    foreach ($failure as $file) {
+        if ($file->pid) {
+            $body .= $file->pid . "\t error saving\n";
+        } else {
+            if ($file->ppid) {
+                $body .= $file->ppid . "\t not found\n";
             } else {
-                if ($file->ppid) {
-                    $body .= $file->ppid . "\t not found\n";
-                } else {
-                    $noPid++;
-                }
+                $noPid++;
             }
         }
-        if ($noPid > 0) {
-            $body .= "No PID could be found for $noPid files\n";
-        }
-        $body .= "\n";
+    }
+    if ($noPid > 0) {
+        $body .= "No PID could be found for $noPid files\n";
+    }
+    $body .= "\n";
+}
+
+$body .= "Please verify these are the results you are expecting. If they are not, please inform the administrator.\n";
+
+echo $body;
+
+$mail = new MyMailer();
+try {
+    $msg = mailparse_msg_get_part($structure, $structure[0]);
+    $msg_data = mailparse_msg_get_part_data($msg);
+    $mail->SetFrom("openemr@".gethostname());
+    $mail->AddAddress($GLOBALS["practice_return_email_path"]);
+    $mail->Subject = $subject;
+    $mail->Body = $body;
+
+    foreach ($failure as $file) {
+        /* @var File $file */
+        $tmpFile = tmpfile();
+        fwrite($tmpFile, $file->data);
+
+        $mail->AddAttachment(stream_get_meta_data($tmpFile)['uri'],
+            $file->pid ? $file->pid : $GLOBALS['patient_registration_form_file_name'],
+            "base64",
+            $file->type
+        );
     }
 
-    $body .= "Please verify these are the results you are expecting. If they are not, please inform the administrator.\n";
-
-    echo $body;
-
-//    $mail = new MyMailer();
-//    try {
-//        $msg = mailparse_msg_get_part($structure, $structure[0]);
-//        $msg_data = mailparse_msg_get_part_data($msg);
-//        $mail->SetFrom($msg_data['headers']['to']);
-//        $mail->AddAddress($GLOBALS["practice_return_email_path"]);
-//
-//    } catch (phpmailerException $e) {
-//    }
+    $mail->Send();
+} catch (phpmailerException $e) {
+    var_dump($e);
 }
+
+exit(0);
