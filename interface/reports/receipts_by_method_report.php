@@ -452,7 +452,7 @@ if ($_POST['form_refresh']) {
     if ($form_use_edate) {
       $query .= " ORDER BY s.reference, fe.date, a.pid, a.encounter, fe.id";
     } else {
-      $query .= " ORDER BY s.reference, s.deposit_date, a.post_time, a.pid, a.encounter, fe.id";
+      $query .= " ORDER BY s.payment_method, s.reference, s.deposit_date, a.post_time, a.pid, a.encounter, fe.id";
     }
     //
     $res = sqlStatement($query);
@@ -477,7 +477,7 @@ if ($_POST['form_refresh']) {
         if (empty($row['session_id'])) {
           $rowmethod = trim($row['memo']);
         } else {
-          $rowmethod = trim($row['payment_method']);
+          $rowmethod = trim(getListItemTitle("payment_method", $row['payment_method']));
         }
         if ($form_report_by != '3') {
           // Extract only the first word as the payment method because any
