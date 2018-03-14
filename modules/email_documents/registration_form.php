@@ -54,14 +54,20 @@ class File
 
         // pid may have spaces in, will produce an array result, we should concat them with " "
         $this->ppid = implode(" ", $result);
-        $patients = getPatientId($this->ppid, "id");
+        $patients = getPatientId($this->ppid, "id, pubpid", "pubpid");
         if (sizeof($patients) == 0) {
             return false;
         }
         if (sizeof($patients) > 1) {
-            return false;
+            // we have multiple, need to check for an exact match
+            foreach($patients as $patient) {
+                if ($patient['pubpid'] === $this->ppid) {
+                    $this->pid = $patient['id'];
+                }
+            }
+        } else {
+            $this->pid = $patients[0]['id'];
         }
-        $this->pid = $patients[0]['id'];
 
         return $this->pid;
     }
@@ -190,7 +196,7 @@ $body = "This is an automated message from the OpenEMR registration form importe
 if ($successCount > 0) {
     $body .= "Successful forms were located for:\n";
     foreach ($success as $file) {
-        $body .= $file->pid . "\n";
+        $body .= $file->ppid . "\n";
     }
     $body .= "\n";
 }
@@ -201,7 +207,7 @@ if ($failureCount > 0) {
     $body .= "The following errors were encountered:\n";
     foreach ($failure as $file) {
         if ($file->pid) {
-            $body .= $file->pid . "\t error saving\n";
+            $body .= $file->ppid . "\t error saving\n";
         } else {
             if ($file->ppid) {
                 $body .= $file->ppid . "\t not found\n";
