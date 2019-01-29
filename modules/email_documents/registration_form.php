@@ -42,6 +42,7 @@ class File
         $im = new Imagick();
         $im->setResolution(300, 300);
         $im->readImageBlob($this->data);
+        $im->contrastImage(true);
         $im->setImageFormat("jpg");
         $im->writeImage($tmpfile);
         $im->clear();
