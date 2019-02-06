@@ -1189,6 +1189,7 @@ if ($GLOBALS['athletic_team']) {
     <ul>
       <?php genMiscLink('RBot','cod','2',xl('Fee Sheet'),'patient_file/encounter/load_form.php?formname=fee_sheet'); ?>
       <?php genMiscLink('RBot','bil','1',xl('Checkout'),'patient_file/pos_checkout.php?framed=1'); ?>
+      <?php genMiscLink('RBot','bil','0',xl('POS'),'../modules/pos/staff-pos.php'); ?>
     </ul>
   </li>
   <?php } ?>
@@ -1350,6 +1351,7 @@ if (!empty($reg)) {
       <?php if ($GLOBALS['use_charges_panel']) genTreeLink('RBot','cod',xl('Charges')); ?>
       <?php genMiscLink('RBot','pay','1',xl('Payment'),'patient_file/front_payment.php'); ?>
       <?php genMiscLink('RBot','bil','1',xl('Checkout'),'patient_file/pos_checkout.php?framed=1'); ?>
+      <?php genMiscLink('RBot','bil','0',xl('POS'),'../modules/pos/staff-pos.php'); ?>
       <?php if (! $GLOBALS['simplified_demographics']) genTreeLink('RTop','bil',xl('Billing')); ?>
 	  <?php genTreeLink('RTop','npa',xl('Batch Payments'),false,2);?>
 	  <?php genMiscLink('RTop','eob','0',xl('Posting'), 'billing/sl_eob_search.php'); ?>
