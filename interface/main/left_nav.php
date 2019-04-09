@@ -141,6 +141,7 @@ use ESign\Api;
   'tan' => array(xl('Configure Tracks')  , 0, 'forms/track_anything/create.php'),
   'prp' => array(xl('Pt Report') , 1, 'patient_file/report/patient_report.php'),
   'prq' => array(xl('Pt Rec Request') , 1, 'patient_file/transaction/record_request.php'),
+  'reg' => array(xl('Pt Reg Form') , 1, 'patient_file/registration_form.php'),
   'pno' => array(xl('Pt Notes')  , 1, 'patient_file/summary/pnotes.php'),
   'tra' => array(xl('Transact')  , 1, 'patient_file/transaction/transactions.php'),
   'sum' => array(xl('Summary')   , 1, 'patient_file/summary/summary_bottom.php'),
@@ -1295,6 +1296,7 @@ if ($GLOBALS['athletic_team']) {
       <li><a class="collapsed_lv2"><span><?php xl('Records','e') ?></span></a>
         <ul>
           <?php genTreeLink('RTop','prq',xl('Patient Record Request')); ?>
+          <?php genTreeLink('RTop','reg',xl('Patient Registration Form')); ?>
         </ul>
       </li>
 
