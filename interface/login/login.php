@@ -25,6 +25,10 @@
  * @link    http://www.open-emr.org
  */
 
+if ($_GET['krb5'] != "false") {
+    header("Location: /interface/login/krb5.php");
+}
+
 $fake_register_globals=false;
 $sanitize_all_escapes=true;
 
