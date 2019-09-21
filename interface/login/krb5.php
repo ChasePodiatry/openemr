@@ -15,6 +15,7 @@ $successUrl = "/interface/main/main_screen.php?&site=" . attr($_SESSION['site_id
 function loginFailed()
 {
     header("Location: /interface/login/login.php?krb5=false");
+    exit();
 }
 
 function loginSuccess($userInfo, $authGroup, $provider)
