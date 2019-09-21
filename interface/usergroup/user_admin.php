@@ -24,6 +24,12 @@ if ($_GET["mode"] == "update") {
     sqlStatement("update groups set user='$tqvar' where user='". $user_data["username"]  ."'");
     //echo "query was: " ."update groups set user='$tqvar' where user='". $user_data["username"]  ."'" ;
   }
+
+    if($_GET["krb5"]) {
+        $tqvar = formData("krb5", 'G');
+        sqlStatement("update users set krb5_principle = '$tqvar' where id = {$_GET["id"]}");
+    }
+
   if ($_GET["taxid"]) {
     $tqvar = formData('taxid','G');
     sqlStatement("update users set federaltaxid='$tqvar' where id={$_GET["id"]}");
@@ -366,8 +372,8 @@ $bg_count=count($acl_name);
     <TD class='text' style="width:280px;"><input type='password' name=adminPass style="width:150px;"  value="" autocomplete='off'><font class="mandatory">*</font></TD>
 </TR>
 <TR>
-    <TD style="width:180px;"><span class=text></span></TD>
-    <TD style="width:270px;"></td>
+    <TD style="width:180px;"><span class=text><?php xl('Kerberos', 'e');?>: </span></TD>
+    <TD style="width:270px;"><input type=entry name=krb5 style="width:150px;"  value="<?php echo $iter["krb5_principle"]; ?>"></td></td>
     <TD style="width:200px;"><span class=text><?php xl('User\'s New Password','e'); ?>: </span></TD>
     <TD class='text' style="width:280px;">    <input type=text name=clearPass style="width:150px;"  value=""><font class="mandatory">*</font></td>
 </TR>
