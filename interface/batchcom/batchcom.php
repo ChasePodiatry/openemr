@@ -39,7 +39,7 @@ if (!$thisauth) {
 $choices=Array (xl('CSV File'),xl('Email'),xl('Phone call list'));
 $gender=Array (xl('Any'),xl('Male'),xl('Female'));
 $hipaa=Array (xl('NO'),xl('YES'));
-$sort_by=Array (xl('Zip Code')=>'patient_data.postal_code',xl('Last Name')=>'patient_data.lname',xl('Appointment Date')=>'last_ap' );
+$sort_by=Array (xl('Zip Code')=>'patient_data.postal_code',xl('Last Name')=>'patient_data.lname',xl('Appointment Date')=>'last_appt' );
 
 // process form
 if ($_POST['form_action']=='Process') {
