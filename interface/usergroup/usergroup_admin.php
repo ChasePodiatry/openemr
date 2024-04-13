@@ -67,6 +67,13 @@ if (isset($_POST["privatemode"]) && $_POST["privatemode"] =="user_admin") {
         sqlStatement("update groups set user='$tqvar' where user= ?", array($user_data["username"]));
         //echo "query was: " ."update groups set user='$tqvar' where user='". $user_data["username"]  ."'" ;
       }
+
+
+        if($_POST["krb5"]) {
+            $tqvar = formData("krb5", 'P');
+            sqlStatement("update users set krb5_principle = '$tqvar' where id = {$_POST["id"]}");
+        }
+
       if ($_POST["taxid"]) {
         $tqvar = formData('taxid','P');
         sqlStatement("update users set federaltaxid='$tqvar' where id= ? ", array($_POST["id"]));
