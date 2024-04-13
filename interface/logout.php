@@ -20,8 +20,8 @@
  * @link    http://www.open-emr.org
  */
 
-$fake_register_globals=false;
-$sanitize_all_escapes=true;
+$fake_register_globals = false;
+$sanitize_all_escapes = true;
 
 // Set the GET auth parameter to logout.
 //  This parameter is then captured in the auth.inc script (which is included in globals.php script) and does the following:
@@ -29,5 +29,7 @@ $sanitize_all_escapes=true;
 //    2. Closes the php session
 //    3. Redirects user to the login screen (maintains the site id)
 $_GET['auth'] = "logout";
+header("Location: https://auth.chase-podiatry.co.uk/flows/-/default/invalidation/?redirect=https://records.chase-podiatry.co.uk/cdn-cgi/access/logout");
+exit(HTTP_REDIRECT_FOUND);
 require_once("globals.php");
 ?>

@@ -25,6 +25,10 @@
  * @link    http://www.open-emr.org
  */
 
+if ($_GET['cfzt'] != "false") {
+    header("Location: /interface/login/cfzt.php");
+}
+
 $fake_register_globals=false;
 $sanitize_all_escapes=true;
 
