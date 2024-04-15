@@ -326,6 +326,7 @@ if ($GLOBALS['concurrent_layout']) {
  $top_bg_line = ' bgcolor="#94d6e7" ';
  $GLOBALS['style']['BGCOLOR2'] = "#94d6e7";
  $bottom_bg_line = ' background="'.$rootdir.'/pic/aquabg.gif" ';
+ $bottom_bg_line = ' background="'.$rootdir.'/pic/aquabg.gif" ';
  $title_bg_line = ' bgcolor="#aaffff" ';
  $nav_bg_line = ' bgcolor="#94d6e7" ';
 }
@@ -455,4 +456,10 @@ if ($fake_register_globals) {
   extract($_GET,EXTR_SKIP);
   extract($_POST,EXTR_SKIP);
 }
+
+// Fix for https behind reverse proxy
+if (isset(getallheaders()['X-Forwarded-Proto']) && getallheaders()['X-Forwarded-Proto'] == 'https') {
+    $_SERVER['HTTPS'] = 'on';
+}
+
 ?>
