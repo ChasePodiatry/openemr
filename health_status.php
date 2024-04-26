@@ -13,7 +13,11 @@ $phone = $res['gl_value'];
 
 $error = false;
 
-if (!$phone || !$config) {
+$session = session_start();
+$_SESSION['phone'] = $phone;
+session_abort();
+
+if (!$phone || !$config || !$session) {
     http_response_code(500);
     $error = true;
 }
