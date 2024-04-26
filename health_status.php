@@ -1,7 +1,7 @@
 <?php
 ini_set('exit_on_timeout', true);
-ini_set('max_execution_time', 5);
-ini_set('mysql.connect_timeout', 5);
+ini_set('max_execution_time', 60);
+ini_set('mysql.connect_timeout', 60);
 
 $ignoreAuth=true;
 include_once("interface/globals.php");
