@@ -300,7 +300,7 @@ function generate_receipt($patient_id, $encounter=0) {
       $ferow = sqlQuery("SELECT id, date, encounter, provider_id FROM form_encounter " .
         "WHERE pid = ? AND encounter = ?", array($patient_id,$encounter) );
     } else {
-      $ferow = sqlQuery("SELECT id, date, encounter, provider_id FROM form_encounter " .
+      $ferow = sqlQuery("SELECT id, date, encounter, provider_id, supervisor_id FROM form_encounter " .
         "WHERE pid = ? " .
         "ORDER BY id DESC LIMIT 1", array($patient_id) );
     }
@@ -312,6 +312,9 @@ function generate_receipt($patient_id, $encounter=0) {
     if ($GLOBALS['receipts_by_provider'] || true){
       if (isset($ferow['provider_id']) ) {
         $encprovider = $ferow['provider_id'];
+        if (isset($ferow['supervisor_id']) && $ferow['supervisor_id'] != $ferow['provider_id']) {
+            $supprovider = $ferow['supervisor_id'];
+        }
       } else if (isset($patdata['providerID'])){
         $encprovider = $patdata['providerID'];
       } else { $encprovider = -1; }
@@ -320,6 +323,11 @@ function generate_receipt($patient_id, $encounter=0) {
     if ($encprovider){
       $providerrow = sqlQuery("SELECT fname, mname, lname, title, street, streetb, " .
         "city, state, zip, phone, fax, upin FROM users WHERE id = ?", array($encprovider) );
+    }
+
+    if ($supprovider) {
+        $supervisorrow = sqlQuery("SELECT fname, mname, lname, title, street, streetb, " .
+            "city, state, zip, phone, fax, upin FROM users WHERE id = ?", array($supprovider) );
     }
 
   // Get invoice reference number.
@@ -370,6 +378,7 @@ function generate_receipt($patient_id, $encounter=0) {
 ?>
 <?php
     printProviderDetails($providerrow);
+    printSupervisorDetails($supervisorrow);
 ?>
 <?php
   echo xlt("Receipt Generated") . ":" . text(date(' F j, Y'));
@@ -575,6 +584,14 @@ function printProviderDetails($pvdrow) {
     echo xlt("Provider") . ": " . text($pvdrow['title']) . " " . text($pvdrow['fname']) . " " . text($pvdrow['mname']) . " " . text($pvdrow['lname']) . " " . text($pvdrow['upin']) .
     "<br>&nbsp" .
     "<br>";
+}
+
+function printSupervisorDetails($pvdrow) {
+    if($pvdrow) {
+        echo xlt("Supervisor") . ": " . text($pvdrow['title']) . " " . text($pvdrow['fname']) . " " . text($pvdrow['mname']) . " " . text($pvdrow['lname']) . " " . text($pvdrow['upin']) .
+            "<br>&nbsp" .
+            "<br>";
+    }
 }
 
 // Mark the tax rates that are referenced in this invoice.
